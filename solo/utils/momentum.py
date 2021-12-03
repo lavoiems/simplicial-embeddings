@@ -65,7 +65,7 @@ class MomentumUpdater:
         """Performs the momentum update for each param group.
 
         Args:
-            online_net (nn.Module): online network (e.g. online backbone, online projection, etc...).
+            online_net (nn.Module): online network (e.g. online backbone, online projection, etc).
             momentum_net (nn.Module): momentum network (e.g. momentum backbone,
                 momentum projection, etc...).
         """

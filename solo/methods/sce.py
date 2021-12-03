@@ -23,30 +23,32 @@ from typing import Any, Dict, List, Sequence, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from solo.losses.ressl import ressl_loss_func
+from solo.losses.sce import sce_loss_func
 from solo.methods.base import BaseMomentumMethod
 from solo.utils.momentum import initialize_momentum_params
 from solo.utils.misc import gather
 
 
-class ReSSL(BaseMomentumMethod):
+class SCE(BaseMomentumMethod):
     def __init__(
         self,
         proj_output_dim: int,
         proj_hidden_dim: int,
-        temperature_q: float,
-        temperature_k: float,
+        temperature: float,
+        temperature_momentum: float,
+        lamb: float,
         queue_size: int,
         **kwargs,
     ):
-        """Implements ReSSL (https://arxiv.org/abs/2107.09282v1).
+        """Implements SCE (https://arxiv.org/abs/2111.14585).
 
         Args:
             proj_output_dim (int): number of dimensions of projected features.
             proj_hidden_dim (int): number of neurons of the hidden layers of the projector.
             pred_hidden_dim (int): number of neurons of the hidden layers of the predictor.
-            temperature_q (float): temperature for the contrastive augmentations.
-            temperature_k (float): temperature for the weak augmentation.
+            temperature (float): temperature for the contrastive augmentations.
+            temperature_momentum (float): temperature for the weak augmentation.
+            lamb (float): coefficient between contrastive and relational.
         """
 
         super().__init__(**kwargs)
@@ -55,6 +57,10 @@ class ReSSL(BaseMomentumMethod):
         self.projector = nn.Sequential(
             nn.Linear(self.features_dim, proj_hidden_dim),
             nn.ReLU(),
+            nn.BatchNorm1d(proj_hidden_dim),
+            nn.Linear(proj_hidden_dim, proj_hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(proj_hidden_dim),
             nn.Linear(proj_hidden_dim, proj_output_dim),
         )
 
@@ -62,12 +68,17 @@ class ReSSL(BaseMomentumMethod):
         self.momentum_projector = nn.Sequential(
             nn.Linear(self.features_dim, proj_hidden_dim),
             nn.ReLU(),
+            nn.BatchNorm1d(proj_hidden_dim),
+            nn.Linear(proj_hidden_dim, proj_hidden_dim),
+            nn.ReLU(),
+            nn.BatchNorm1d(proj_hidden_dim),
             nn.Linear(proj_hidden_dim, proj_output_dim),
         )
         initialize_momentum_params(self.projector, self.momentum_projector)
 
-        self.temperature_q = temperature_q
-        self.temperature_k = temperature_k
+        self.temperature = temperature
+        self.temperature_momentum = temperature_momentum
+        self.lamb = lamb
         self.queue_size = queue_size
 
         # queue
@@ -77,19 +88,20 @@ class ReSSL(BaseMomentumMethod):
 
     @staticmethod
     def add_model_specific_args(parent_parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        parent_parser = super(ReSSL, ReSSL).add_model_specific_args(parent_parser)
-        parser = parent_parser.add_argument_group("ressl")
+        parent_parser = super(SCE, SCE).add_model_specific_args(parent_parser)
+        parser = parent_parser.add_argument_group("sce")
 
         # projector
         parser.add_argument("--proj_output_dim", type=int, default=256)
-        parser.add_argument("--proj_hidden_dim", type=int, default=2048)
+        parser.add_argument("--proj_hidden_dim", type=int, default=4096)
 
         # queue settings
         parser.add_argument("--queue_size", default=65536, type=int)
 
         # parameters
-        parser.add_argument("--temperature_q", type=float, default=0.1)
-        parser.add_argument("--temperature_k", type=float, default=0.04)
+        parser.add_argument("--temperature", type=float, default=0.1)
+        parser.add_argument("--temperature_momentum", type=float, default=0.05)
+        parser.add_argument("--lamb", type=float, default=0.5)
 
         return parent_parser
 
@@ -152,7 +164,7 @@ class ReSSL(BaseMomentumMethod):
         return {**out, "z": z}
 
     def training_step(self, batch: Sequence[Any], batch_idx: int) -> torch.Tensor:
-        """Training step for ReSSL reusing BaseMethod training step.
+        """Training step for SCE reusing BaseMethod training step.
 
         Args:
             batch (Sequence[Any]): a batch of data in the format of [img_indexes, [X], Y], where
@@ -160,7 +172,7 @@ class ReSSL(BaseMomentumMethod):
             batch_idx (int): index of the batch.
 
         Returns:
-            torch.Tensor: total loss composed of ReSSL and classification loss.
+            torch.Tensor: total loss composed of SCE and classification loss.
         """
 
         out = super().training_step(batch, batch_idx)
@@ -168,22 +180,25 @@ class ReSSL(BaseMomentumMethod):
         feats1, _ = out["feats"]
         _, momentum_feats2 = out["momentum_feats"]
 
-        q = self.projector(feats1)
+        z1 = self.projector(feats1)
 
         # forward momentum backbone
         with torch.no_grad():
-            k = self.momentum_projector(momentum_feats2)
+            z2 = self.momentum_projector(momentum_feats2)
 
-        q = F.normalize(q, dim=-1)
-        k = F.normalize(k, dim=-1)
+        z1 = F.normalize(z1, dim=-1)
+        z2 = F.normalize(z2, dim=-1).detach()
 
-        # ------- contrastive loss -------
+        # ------- loss -------
         queue = self.queue.clone().detach()
-        ressl_loss = ressl_loss_func(q, k, queue, self.temperature_q, self.temperature_k)
 
-        self.log("ressl_loss", ressl_loss, on_epoch=True, sync_dist=True)
+        sce_loss = sce_loss_func(
+            z1, z2, queue, self.temperature, self.temperature_momentum, self.lamb
+        )
+
+        self.log("sce_loss", sce_loss, on_epoch=True, sync_dist=True)
 
         # dequeue and enqueue
-        self.dequeue_and_enqueue(k)
+        self.dequeue_and_enqueue(z2)
 
-        return ressl_loss + class_loss
+        return sce_loss + class_loss
