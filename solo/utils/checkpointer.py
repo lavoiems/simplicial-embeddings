@@ -64,6 +64,7 @@ class Checkpointer(Callback):
         self.logdir = Path(logdir)
         self.frequency = frequency
         self.keep_previous_checkpoints = keep_previous_checkpoints
+        self.best_val = float('-inf')  # XXX Normally this should be checkpointed as well
 
     @staticmethod
     def add_checkpointer_args(parent_parser: ArgumentParser):
@@ -134,6 +135,14 @@ class Checkpointer(Callback):
             if self.last_ckpt and self.last_ckpt != ckpt and not self.keep_previous_checkpoints:
                 os.remove(self.last_ckpt)
             self.last_ckpt = ckpt
+
+            current_val = float(trainer.callback_metrics['val_acc1'])
+            best_ckpt = self.path / 'best.ckpt'
+            if current_val > self.best_val:
+                if os.path.isfile(best_ckpt):
+                    os.remove(best_ckpt)
+                self.best_val = current_val
+                trainer.save_checkpoint(best_ckpt)
 
     def on_train_start(self, trainer: pl.Trainer, _):
         """Executes initial setup and saves arguments.
