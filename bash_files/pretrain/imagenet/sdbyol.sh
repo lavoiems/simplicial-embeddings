@@ -37,14 +37,19 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 1.0 0.1 \
     --solarization_prob 0.0 0.2 \
     --num_crops_per_aug 1 1 \
-    --name byol-resnet50-imagenet-100epochs \
+    --name sdbyol-resnet50-imagenet-100epochs \
     --project solo-learn \
     --wandb \
     --save_checkpoint \
-    --method byol \
+    --method sdbyol \
     --proj_output_dim 256 \
     --proj_hidden_dim 4096 \
     --pred_hidden_dim 4096 \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
+    --voc_size 12 \
+    --message_size 195 \
+    --min_lr 0.1 \
+    --tau_online 1.1 \
+    --tau_target 1.1 \
     --momentum_classifier
