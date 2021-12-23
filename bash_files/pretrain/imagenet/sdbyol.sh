@@ -3,7 +3,6 @@
 ROOT_PATH=$1
 
 ../../../prepare_data.sh VAL
-source ~/env/bin/activate
 
 python3 ../../../main_pretrain.py \
     --dataset imagenet \

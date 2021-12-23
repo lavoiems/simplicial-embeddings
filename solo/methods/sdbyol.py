@@ -267,82 +267,71 @@ class SDBYOL(BaseMomentumMethod):
         return neg_cos_sim + class_loss + online_class_loss
 
 
-#    @torch.no_grad()
-#    def validation_step(
-#        self, batch: List[torch.Tensor], batch_idx: int, dataloader_idx: int = None
-#    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-#        """Validation step for pytorch lightning. It performs all the shared operations for the
-#        momentum backbone and classifier, such as forwarding a batch of images in the momentum
-#        backbone and classifier and computing statistics.
-#        Args:
-#            batch (List[torch.Tensor]): a batch of data in the format of [X, Y].
-#            batch_idx (int): index of the batch.
-#        Returns:
-#            Tuple(Dict[str, Any], Dict[str, Any]): tuple of dicts containing the batch_size (used
-#                for averaging), the classification loss and accuracies for both the online and the
-#                momentum classifiers.
-#        """
-#
-#        pm0, pm1 = super().validation_step(batch, batch_idx)
-#
-#        x, targets = batch
-#        X = self.backbone(x)
-#        #momentum_X = self.momentum_backbone(x)
-#        batch_size = targets.size(0)
-#
-#        emb = self.embedder(X)
-#        #emb_momentum = self.embedder(momentum_X)
-#
-#        emb = emb.view(-1, self.message_size, self.voc_size)
-#        y_hard = F.one_hot(emb.argmax(-1), num_classes=self.voc_size)
-#        y_hard = y_hard.view(y_hard.shape[0], -1)
-#        y_hard = y_hard.to(emb.dtype)
-#        online_class = self._class_step(y_hard, targets, self.linear_y)
-#        online_class = {
-#            "val_online_" + k: v for k, v in online_class.items()
-#        }
-#
-#        #emb_momentum = emb_momentum.view(-1, self.message_size, self.voc_size)
-#        #y_hard_momentum = F.one_hot(emb_momentum.argmax(-1), num_classes=self.voc_size)
-#        #y_hard_momentum = y_hard_momentum.view(y_hard.shape[0], -1)
-#        #y_hard_momentum = y_hard_momentum.to(emb_momentum.dtype)
-#        #momentum_class = self._class_step(y_hard_momentum, targets, self.momentum_linear_y)
-#        #momentum_class = {
-#        #    "val_momentum_" + k: v for k, v in momentum_class.items()
-#        #}
-#
-#        metrics = {
-#            "batch_size": batch_size,
-#        }
-#
-#        metrics.update(online_class)
-#        #metrics.update(momentum_class)
-#
-#        return pm0, pm1, metrics
-#
-#    def validation_epoch_end(self, outs: Tuple[List[Dict[str, Any]]]):
-#        """Averages the losses and accuracies of the momentum backbone / classifier for all the
-#        validation batches. This is needed because the last batch can be smaller than the others,
-#        slightly skewing the metrics.
-#        Args:
-#            outs (Tuple[List[Dict[str, Any]]]):): list of outputs of the validation step for self
-#                and the parent.
-#        """
-#
-#        parent_outs = [(out[0], out[1]) for out in outs]
-#        super().validation_epoch_end(parent_outs)
-#
-#        if self.momentum_classifier is not None:
-#            outs = [out[2] for out in outs]
-#
-#            online_val_loss = weighted_mean(outs, "val_online_loss", "batch_size")
-#            online_val_acc1 = weighted_mean(outs, "val_online_acc1", "batch_size")
-#            online_val_acc5 = weighted_mean(outs, "val_online_acc5", "batch_size")
-#
-#            log = {
-#                "online_val_y_loss": online_val_loss,
-#                "online_val_y_acc1": online_val_acc1,
-#                "online_val_y_acc5": online_val_acc5
-#            }
-#            self.log_dict(log, sync_dist=True)
-#
+    @torch.no_grad()
+    def validation_step(
+        self, batch: List[torch.Tensor], batch_idx: int, dataloader_idx: int = None
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Validation step for pytorch lightning. It performs all the shared operations for the
+        momentum backbone and classifier, such as forwarding a batch of images in the momentum
+        backbone and classifier and computing statistics.
+        Args:
+            batch (List[torch.Tensor]): a batch of data in the format of [X, Y].
+            batch_idx (int): index of the batch.
+        Returns:
+            Tuple(Dict[str, Any], Dict[str, Any]): tuple of dicts containing the batch_size (used
+                for averaging), the classification loss and accuracies for both the online and the
+                momentum classifiers.
+        """
+
+        pm0, pm1 = super().validation_step(batch, batch_idx)
+
+        x, targets = batch
+        X = self.backbone(x)
+        batch_size = targets.size(0)
+
+        emb = self.embedder(X)
+
+        emb = emb.view(-1, self.message_size, self.voc_size)
+        y_hard = F.one_hot(emb.argmax(-1), num_classes=self.voc_size)
+        y_hard = y_hard.view(y_hard.shape[0], -1)
+        y_hard = y_hard.to(emb.dtype)
+        online_class = self._class_step(y_hard, targets, self.linear_y)
+        online_class = {
+            "val_online_" + k: v for k, v in online_class.items()
+        }
+
+
+        metrics = {
+            "batch_size": batch_size,
+        }
+
+        metrics.update(online_class)
+
+        return pm0, pm1, metrics
+
+    def validation_epoch_end(self, outs: Tuple[List[Dict[str, Any]]]):
+        """Averages the losses and accuracies of the momentum backbone / classifier for all the
+        validation batches. This is needed because the last batch can be smaller than the others,
+        slightly skewing the metrics.
+        Args:
+            outs (Tuple[List[Dict[str, Any]]]):): list of outputs of the validation step for self
+                and the parent.
+        """
+
+        parent_outs = [(out[0], out[1]) for out in outs]
+        super().validation_epoch_end(parent_outs)
+
+        if self.momentum_classifier is not None:
+            outs = [out[2] for out in outs]
+
+            online_val_loss = weighted_mean(outs, "val_online_loss", "batch_size")
+            online_val_acc1 = weighted_mean(outs, "val_online_acc1", "batch_size")
+            online_val_acc5 = weighted_mean(outs, "val_online_acc5", "batch_size")
+
+            log = {
+                "online_val_y_loss": online_val_loss,
+                "online_val_y_acc1": online_val_acc1,
+                "online_val_y_acc5": online_val_acc5
+            }
+            self.log_dict(log, sync_dist=True)
+
