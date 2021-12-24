@@ -187,7 +187,7 @@ class SDBYOL(BaseMomentumMethod):
         y = self.softmax(emb)
         z = self.projector(y)
         p = self.predictor(z)
-        return {**out, "z": z, "p": p, "logits": logits, "y": y}
+        return {**out, "z": z, "p": p, "y": y}
 
     def _class_step(self, X, targets, classifier):
         logits = classifier(X)
