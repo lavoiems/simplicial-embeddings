@@ -28,7 +28,8 @@ python3 ../../../main_pretrain.py \
     --num_crops_per_aug 1 1 \
     --name sdbyol-$1 \
     --wandb \
-    --project solo-learn \
+    --entity il-group \
+    --project VIL \
     --save_checkpoint \
     --method sdbyol \
     --proj_output_dim 256 \

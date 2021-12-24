@@ -37,7 +37,8 @@ python3 ../../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --num_crops_per_aug 1 1 \
     --name byol-resnet50-imagenet-100epochs \
-    --project solo-learn \
+    --entity il-group \
+    --project VIL \
     --wandb \
     --save_checkpoint \
     --method byol \
