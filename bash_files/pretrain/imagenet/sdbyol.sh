@@ -4,10 +4,13 @@ ROOT_PATH=$1
 
 ../../../prepare_data.sh VAL
 
-python3 ../../../main_pretrain.py \
+source ~/env/bin/activate
+
+orion -vv hunt -n orion_sdbyol --config=orion_config.yaml \
+  python3 ../../../main_pretrain.py \
     --dataset imagenet \
     --backbone resnet50 \
-    --checkpoint_dir=$ROOT_PATH \
+    --checkpoint_dir="$ROOT_PATH/{trial.hash_params}" \
     --data_dir $SLURM_TMPDIR/data \
     --train_dir $SLURM_TMPDIR/data/train/ \
     --val_dir   $SLURM_TMPDIR/data/val/ \
@@ -36,8 +39,8 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 1.0 0.1 \
     --solarization_prob 0.0 0.2 \
     --num_crops_per_aug 1 1 \
-    --name sdbyol-resnet50-imagenet-100epochs \
-    --entity il-group \
+    --name "orion_sdbyol-{trial.hash_params}" \
+    --entity il_group \
     --project VIL \
     --wandb \
     --save_checkpoint \
@@ -47,9 +50,8 @@ python3 ../../../main_pretrain.py \
     --pred_hidden_dim 4096 \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
-    --voc_size 12 \
-    --message_size 195 \
-    --min_lr 0.1 \
-    --tau_online 1.1 \
-    --tau_target 1.1 \
+    --voc_size~'uniform(2,30,discrete=True)' \
+    --message_size~'uniform(50,500,discrete=True)' \
+    --tau_online~'uniform(0.1,10)' \
+    --tau_target~'uniform(0.1,10)' \
     --momentum_classifier

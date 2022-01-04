@@ -2,7 +2,9 @@
 
 ROOT_PATH=$1
 
-../../../prepare_data.sh VAL
+../../../prepare_data.sh TEST
+
+source ~/env/bin/activate
 
 python3 ../../../main_pretrain.py \
     --dataset imagenet \
@@ -11,8 +13,8 @@ python3 ../../../main_pretrain.py \
     --data_dir $SLURM_TMPDIR/data \
     --train_dir $SLURM_TMPDIR/data/train/ \
     --val_dir   $SLURM_TMPDIR/data/val/ \
-    --max_epochs 100 \
-    --gpus 0,1 \
+    --max_epochs 512 \
+    --gpus 0,1,2,3 \
     --accelerator gpu \
     --strategy ddp \
     --sync_batchnorm \
@@ -36,10 +38,11 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 1.0 0.1 \
     --solarization_prob 0.0 0.2 \
     --num_crops_per_aug 1 1 \
-    --name byol-resnet50-imagenet-100epochs \
-    --entity il-group \
+    --name byol-resnet50-imagenet-1000epochs-FULL \
+    --entity il_group \
     --project VIL \
     --wandb \
+    --offline \
     --save_checkpoint \
     --method byol \
     --proj_output_dim 256 \

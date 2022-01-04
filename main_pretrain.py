@@ -119,6 +119,8 @@ def main():
     callbacks = []
 
     # wandb logging
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
     if args.wandb:
         wandb_logger = WandbLogger(
             name=args.name,
