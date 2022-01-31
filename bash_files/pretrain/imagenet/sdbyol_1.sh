@@ -9,12 +9,12 @@ source ~/env/bin/activate
 python3 ../../../main_pretrain.py \
     --dataset imagenet \
     --backbone resnet50 \
-    --checkpoint_dir="$ROOT_PATH" \
+    --checkpoint_dir=$ROOT_PATH \
     --data_dir $SLURM_TMPDIR/data \
     --train_dir $SLURM_TMPDIR/data/train/ \
     --val_dir   $SLURM_TMPDIR/data/val/ \
-    --max_epochs 512 \
-    --gpus 0,1,2,3 \
+    --max_epochs 100 \
+    --gpus 0,1 \
     --accelerator gpu \
     --strategy ddp \
     --sync_batchnorm \
@@ -29,7 +29,7 @@ python3 ../../../main_pretrain.py \
     --classifier_lr 0.2 \
     --weight_decay 1e-6 \
     --batch_size 128 \
-    --num_workers 4 \
+    --num_workers 4 \ 
     --dali \
     --brightness 0.4 \
     --contrast 0.4 \
@@ -37,7 +37,7 @@ python3 ../../../main_pretrain.py \
     --hue 0.1 \
     --gaussian_prob 1.0 0.1 \
     --solarization_prob 0.0 0.2 \
-    --num_crops_per_aug 1 1 \
+    --num_crops_per_aug 1 1 \ 
     --name "orion_sdbyol-FULL" \
     --entity il_group \
     --project VIL \
@@ -50,8 +50,8 @@ python3 ../../../main_pretrain.py \
     --pred_hidden_dim 4096 \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
-    --voc_size 14 \
-    --message_size 410 \
-    --tau_online 2.1 \
-    --tau_target 1.8 \
+    --voc_size 29 \
+    --message_size 465 \
+    --tau_online 2.397 \
+    --tau_target 2.386 \
     --momentum_classifier
