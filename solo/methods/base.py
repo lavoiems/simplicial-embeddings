@@ -27,6 +27,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from solo.utils.backbones import (
+    convnext_base,
+    convnext_large,
+    convnext_small,
+    convnext_tiny,
     poolformer_m36,
     poolformer_m48,
     poolformer_s12,
@@ -76,6 +80,10 @@ class BaseMethod(pl.LightningModule):
         "poolformer_s36": poolformer_s36,
         "poolformer_m36": poolformer_m36,
         "poolformer_m48": poolformer_m48,
+        "convnext_tiny": convnext_tiny,
+        "convnext_small": convnext_small,
+        "convnext_base": convnext_base,
+        "convnext_large": convnext_large,
     }
 
     def __init__(
@@ -296,7 +304,7 @@ class BaseMethod(pl.LightningModule):
         parser.add_argument("--scheduler", choices=SUPPORTED_SCHEDULERS, type=str, default="reduce")
         parser.add_argument("--lr_decay_steps", default=None, type=int, nargs="+")
         parser.add_argument("--min_lr", default=0.0, type=float)
-        parser.add_argument("--warmup_start_lr", default=0.003, type=float)
+        parser.add_argument("--warmup_start_lr", default=0.00003, type=float)
         parser.add_argument("--warmup_epochs", default=10, type=int)
 
         # DALI only

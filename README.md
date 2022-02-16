@@ -15,6 +15,8 @@ While the library is self-contained, it is possible to use the models outside of
 ---
 
 ## News
+* **[Feb 04 2022]**: :partying_face: Paper got accepted to JMLR.
+* **[Jan 31 2022]**: :eye: Added ConvNeXt support with timm.
 * **[Dec 20 2021]**: :thermometer: Added ImageNet results, scripts and checkpoints for MoCo V2+.
 * **[Dec 05 2021]**: :notes: Separated [SupCon](https://arxiv.org/abs/2004.11362) from SimCLR and added runs.
 * **[Dec 01 2021]**: :fountain: Added [PoolFormer](https://arxiv.org/abs/2111.11418).
@@ -35,7 +37,6 @@ While the library is self-contained, it is possible to use the models outside of
 ---
 
 ## Methods available:
-
 * [Barlow Twins](https://arxiv.org/abs/2103.03230)
 * [BYOL](https://arxiv.org/abs/2006.07733)
 * [DeepCluster V2](https://arxiv.org/abs/2006.09882)
@@ -57,11 +58,12 @@ While the library is self-contained, it is possible to use the models outside of
 
 ## Extra flavor
 
-# Multiple backbones
+### Multiple backbones
 * [ResNet](https://arxiv.org/abs/1512.03385)
 * [ViT](https://arxiv.org/abs/2010.11929)
 * [Swin](https://arxiv.org/abs/2103.14030)
 * [PoolFormer](https://arxiv.org/abs/2111.11418)
+* [ConvNeXt](https://arxiv.org/abs/2201.03545)
 
 ### Data
 * Increased data processing speed by up to 100% using [Nvidia Dali](https://github.com/NVIDIA/DALI).
@@ -69,23 +71,23 @@ While the library is self-contained, it is possible to use the models outside of
 
 ### Evaluation and logging
 * Online linear evaluation via stop-gradient for easier debugging and prototyping (optionally available for the momentum backbone as well).
-* Online and offlfine K-NN evaluation.
+* Online and offline K-NN evaluation.
 * Normal offline linear evaluation.
 * All the perks of PyTorch Lightning (mixed precision, gradient accumulation, clipping, automatic logging and much more).
 * Easy-to-extend modular code structure.
 * Custom model logging with a simpler file organization.
 * Automatic feature space visualization with UMAP.
 * Offline UMAP.
-* Common metrics and more to come...
+* Common metrics.
 
 ### Training tricks
 * Multi-cropping dataloading following [SwAV](https://arxiv.org/abs/2006.09882):
-    * **Note**: currently, only SimCLR supports this.
+    * **Note**: currently, only SimCLR and BYOL supports this.
 * Exclude batchnorm and biases from LARS.
 * No LR scheduler for the projection head in SimSiam.
+
 ---
 ## Requirements
-
 * torch
 * torchvision
 * tqdm
@@ -112,7 +114,7 @@ First clone the repo.
 
 Then, to install solo-learn with [Dali](https://github.com/NVIDIA/DALI) and/or UMAP support, use:
 ```
-pip3 install .[dali,umap]
+pip3 install .[dali,umap] --extra-index-url https://developer.download.nvidia.com/compute/redist
 ```
 
 If no Dali/UMAP support is needed, the repository can be installed as:
@@ -120,13 +122,11 @@ If no Dali/UMAP support is needed, the repository can be installed as:
 pip3 install .
 ```
 
-**NOTE:** if you are having trouble with dali, install it with `pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110` or with your specific cuda version.
+**NOTE:** if you are having trouble with dali, install it following their [guide](https://github.com/NVIDIA/DALI).
 
 **NOTE 2:** consider installing [Pillow-SIMD](https://github.com/uploadcare/pillow-simd) for better loading times when not using Dali.
 
-**NOTE 3:** If you want to modify the library, install it in dev mode with `-e`.
-
-**NOTE 4:** Soon to be on pip.
+**NOTE 3:** Soon to be on pip.
 
 ---
 
@@ -134,7 +134,9 @@ pip3 install .
 
 For pretraining the backbone, follow one of the many bash files in `bash_files/pretrain/`.
 
-After that, for offline linear evaluation, follow the examples on `bash_files/linear`.
+After that, for offline linear evaluation, follow the examples in `bash_files/linear`.
+
+There are extra experiments on K-NN evaluation in `bash_files/knn/` and feature visualization with UMAP in `bash_files/umap/`.
 
 **NOTE:** Files try to be up-to-date and follow as closely as possible the recommended parameters of each paper, but check them before running.
 
@@ -232,11 +234,11 @@ All pretrained models avaiable can be downloaded directly via the tables below o
 
 | Method       | Backbone | Epochs |        Dali        | Acc@1 (online) | Acc@1 (offline) | Acc@5 (online) | Acc@5 (offline) | Checkpoint |
 |--------------|:--------:|:------:|:------------------:|:--------------:|:---------------:|:--------------:|:---------------:|:----------:|
-| Barlow Twins | ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
-| BYOL         | ResNet50 |   100  | :heavy_check_mark: |      68.63     |      68.37      |      88.80     |       88.66     | [:link:](https://drive.google.com/drive/folders/1-UXo-MttdrqiEQXfV4Duc93fA3mIdsha?usp=sharing) |
+| Barlow Twins | ResNet50 |   100  | :heavy_check_mark: |      67.18     |      67.23      |      87.69     |      87.98      | [:link:](https://drive.google.com/drive/folders/1IQUIrCOSduAjUJ31WJ1G5tHDZzWUIEft?usp=sharing) |
+| BYOL         | ResNet50 |   100  | :heavy_check_mark: |      68.63     |      68.37      |      88.80     |      88.66      | [:link:](https://drive.google.com/drive/folders/1-UXo-MttdrqiEQXfV4Duc93fA3mIdsha?usp=sharing) |
 |DeepCluster V2| ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
 | DINO         | ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
-| MoCo V2+     | ResNet50 |   100  | :heavy_check_mark: |      62.61     |      66.84      |      85.40     |       87.60     | [:link:](https://drive.google.com/drive/folders/1NiBDmieEpNqkwrgn_H7bMnEDVAYc8Sk7?usp=sharing) |
+| MoCo V2+     | ResNet50 |   100  | :heavy_check_mark: |      62.61     |      66.84      |      85.40     |      87.60      | [:link:](https://drive.google.com/drive/folders/1NiBDmieEpNqkwrgn_H7bMnEDVAYc8Sk7?usp=sharing) |
 | NNCLR        | ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
 | ReSSL        | ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
 | SimCLR       | ResNet50 |   100  | :heavy_check_mark: |                |                 |                |                 |            |
@@ -252,29 +254,30 @@ All pretrained models avaiable can be downloaded directly via the tables below o
 
 We report the training efficiency of some methods using a ResNet18 with and without DALI (4 workers per GPU) in a server with an Intel i9-9820X and two RTX2080ti.
 
-| Method       |  Dali  |  Total time for 20 epochs  |  Time for a 1 epoch |  GPU memory (per GPU) |
-|--------------|:------:|:--------------------------:|:-------------------:|:---------------------:|
-| Barlow Twins | :x:              | 1h 38m 27s |  4m 55s              |      5097 MB     |
-|              |:heavy_check_mark:| 43m 2s     |  2m 10s (56% faster) |      9292 MB     |
-| BYOL         | :x:              | 1h 38m 46s |  4m 56s              |      5409 MB     |
-|              |:heavy_check_mark:| 50m 33s    |  2m 31s (49% faster) |      9521 MB     |
-| NNCLR        | :x:              | 1h 38m 30s |  4m 55s              |      5060 MB     |
-|              |:heavy_check_mark:| 42m 3s     |  2m 6s  (64% faster) |      9244 MB     |
+| Method       |  Dali            |  Total time for 20 epochs  |  Time for a 1 epoch  |  GPU memory (per GPU) |
+|--------------|:----------------:|:--------------------------:|:--------------------:|:---------------------:|
+| Barlow Twins | :x:              | 1h 38m 27s                 |  4m 55s              |      5097 MB          |
+|              |:heavy_check_mark:| 43m 2s                     |  2m 10s (56% faster) |      9292 MB          |
+| BYOL         | :x:              | 1h 38m 46s                 |  4m 56s              |      5409 MB          |
+|              |:heavy_check_mark:| 50m 33s                    |  2m 31s (49% faster) |      9521 MB          |
+| NNCLR        | :x:              | 1h 38m 30s                 |  4m 55s              |      5060 MB          |
+|              |:heavy_check_mark:| 42m 3s                     |  2m 6s  (64% faster) |      9244 MB          |
 
 **Note**: GPU memory increase doesn't scale with the model, rather it scales with the number of workers.
 
 ---
 
 ## Citation
-If you use solo-learn, please cite our [preprint](https://arxiv.org/abs/2108.01775v1):
+If you use solo-learn, please cite our [paper](https://jmlr.org/papers/v23/21-1155.html):
 ```
-@misc{turrisi2021sololearn,
-      title={Solo-learn: A Library of Self-supervised Methods for Visual Representation Learning}, 
-      author={Victor G. Turrisi da Costa and Enrico Fini and Moin Nabi and Nicu Sebe and Elisa Ricci},
-      year={2021},
-      eprint={2108.01775},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={\url{https://github.com/vturrisi/solo-learn}},
+@article{JMLR:v23:21-1155,
+  author  = {Victor Guilherme Turrisi da Costa and Enrico Fini and Moin Nabi and Nicu Sebe and Elisa Ricci},
+  title   = {solo-learn: A Library of Self-supervised Methods for Visual Representation Learning},
+  journal = {Journal of Machine Learning Research},
+  year    = {2022},
+  volume  = {23},
+  number  = {56},
+  pages   = {1-6},
+  url     = {http://jmlr.org/papers/v23/21-1155.html}
 }
 ```
