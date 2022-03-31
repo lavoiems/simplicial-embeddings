@@ -228,6 +228,13 @@ class SDBYOL(BaseMomentumMethod):
         # calculate std of features
         with torch.no_grad():
             z_std = F.normalize(torch.stack(Z[: self.num_large_crops]), dim=-1).std(dim=1).mean()
+        with torch.no_grad():
+            y = Y[0]
+            entropy = Y*torch.log(Y).neg().sum(-1)
+            entropy = {
+              'mu': entropy.mean(),
+              'std': entropy.std()
+            }
 
         emb = embs[0].view(-1, self.message_size, self.voc_size)
         outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
@@ -236,7 +243,7 @@ class SDBYOL(BaseMomentumMethod):
             f"online_y_{tau}_" + k: v for tau, oc in zip(self.taus, online_class) for k, v in oc.items()
         }
 
-        return neg_cos_sim, z_std, online_class
+        return neg_cos_sim, z_std, online_class, entropy
 
     def training_step(self, batch: Sequence[Any], batch_idx: int) -> torch.Tensor:
         """Training step for BYOL reusing BaseMethod training step.
@@ -254,7 +261,7 @@ class SDBYOL(BaseMomentumMethod):
         class_loss = out["loss"]
         *_, targets = batch
 
-        neg_cos_sim, z_std, online_class = self._shared_step(out["feats"], out["momentum_feats"], targets)
+        neg_cos_sim, z_std, online_class, entropy = self._shared_step(out["feats"], out["momentum_feats"], targets)
         online_class_loss = sum([online_class[f'online_y_{tau}_loss'] for tau in self.taus if not math.isnan(online_class[f'online_y_{tau}_loss'])])
 
         online_class = {
@@ -264,6 +271,8 @@ class SDBYOL(BaseMomentumMethod):
         metrics = {
             "train_neg_cos_sim": neg_cos_sim,
             "train_z_std": z_std,
+            "train_H_mu": entropy['mu'],
+            'train_H_std': entropy['std'],
         }
 
         metrics.update(online_class)
