@@ -19,6 +19,7 @@
 
 import argparse
 from typing import Any, Dict, List, Sequence, Tuple
+import math
 
 import torch
 import torch.nn as nn
@@ -118,7 +119,9 @@ class SDBYOL(BaseMomentumMethod):
         )
 
         # Y classifiers
-        self.linear_y = torch.nn.Linear(message_size*voc_size, self.num_classes)
+        self.taus = [5e-2, 1e-1, 0.5, 1, 2]
+        self.linears_y = [torch.nn.Linear(message_size*voc_size, self.num_classes) for _ in range(len(self.taus))]
+        self.linears_y = nn.ModuleList(self.linears_y)
         #self.momentum_linear_y = torch.nn.Linear(message_size*voc_size, self.num_classes)
 
     @staticmethod
@@ -149,16 +152,21 @@ class SDBYOL(BaseMomentumMethod):
             List[dict]: list of learnable parameters.
         """
 
-        extra_learnable_params = [
-            {"params": self.projector.parameters()},
-            {"params": self.predictor.parameters()},
-            {"params": self.embedder.parameters()},
-            {"name": 'classifier_y',
-              "params": self.linear_y.parameters(),
+        extra_learnable_params = [{"name": f'classifier_y_{tau}',
+              "params": linear_y.parameters(),
               "lr": self.classifier_lr,
               "weight_decay": 0
-              },
+              }
+              for tau, linear_y in zip(self.taus, self.linears_y)
         ]
+
+        extra_learnable_params += [
+            {"params": self.projector.parameters()},
+            {"params": self.predictor.parameters()},
+            {"params": self.embedder.parameters()}
+        ]
+
+
         return super().learnable_params + extra_learnable_params
 
     @property
@@ -187,7 +195,7 @@ class SDBYOL(BaseMomentumMethod):
         y = self.softmax(emb)
         z = self.projector(y)
         p = self.predictor(z)
-        return {**out, "z": z, "p": p, "y": y}
+        return {**out, "z": z, "p": p, "y": y, "emb": emb}
 
     def _class_step(self, X, targets, classifier):
         logits = classifier(X)
@@ -222,12 +230,10 @@ class SDBYOL(BaseMomentumMethod):
             z_std = F.normalize(torch.stack(Z[: self.num_large_crops]), dim=-1).std(dim=1).mean()
 
         emb = embs[0].view(-1, self.message_size, self.voc_size)
-        y_hard = F.one_hot(emb.argmax(-1), num_classes=self.voc_size)
-        y_hard = y_hard.view(y_hard.shape[0], -1)
-        y_hard = y_hard.to(emb.dtype)
-        online_class = self._class_step(y_hard, targets, self.linear_y)
+        outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+        online_class = [self._class_step(outs_y[tau], targets, linear_y) for tau, linear_y in zip(self.taus, self.linears_y)]
         online_class = {
-            "online_y_" + k: v for k, v in online_class.items()
+            f"online_y_{tau}_" + k: v for tau, oc in zip(self.taus, online_class) for k, v in oc.items()
         }
 
         return neg_cos_sim, z_std, online_class
@@ -249,7 +255,7 @@ class SDBYOL(BaseMomentumMethod):
         *_, targets = batch
 
         neg_cos_sim, z_std, online_class = self._shared_step(out["feats"], out["momentum_feats"], targets)
-        online_class_loss = online_class['online_y_loss']
+        online_class_loss = sum([online_class[f'online_y_{tau}_loss'] for tau in self.taus if not math.isnan(online_class[f'online_y_{tau}_loss'])])
 
         online_class = {
             "train_" + k: v for k, v in online_class.items()
@@ -292,14 +298,12 @@ class SDBYOL(BaseMomentumMethod):
         emb = self.embedder(X)
 
         emb = emb.view(-1, self.message_size, self.voc_size)
-        y_hard = F.one_hot(emb.argmax(-1), num_classes=self.voc_size)
-        y_hard = y_hard.view(y_hard.shape[0], -1)
-        y_hard = y_hard.to(emb.dtype)
-        online_class = self._class_step(y_hard, targets, self.linear_y)
-        online_class = {
-            "val_online_" + k: v for k, v in online_class.items()
-        }
 
+        outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+        online_class = [self._class_step(outs_y[tau], targets, linear_y) for tau, linear_y in zip(self.taus, self.linears_y)]
+        online_class = {
+            f"val_online_y_{tau}_" + k: v for tau, oc in zip(self.taus, online_class) for k, v in oc.items()
+        }
 
         metrics = {
             "batch_size": batch_size,
@@ -324,14 +328,16 @@ class SDBYOL(BaseMomentumMethod):
         if self.momentum_classifier is not None:
             outs = [out[2] for out in outs]
 
-            online_val_loss = weighted_mean(outs, "val_online_loss", "batch_size")
-            online_val_acc1 = weighted_mean(outs, "val_online_acc1", "batch_size")
-            online_val_acc5 = weighted_mean(outs, "val_online_acc5", "batch_size")
+            log = {k: weighted_mean(outs, k, 'batch_size') for k in outs[0].keys() if k != 'batch_size'}
 
-            log = {
-                "online_val_y_loss": online_val_loss,
-                "online_val_y_acc1": online_val_acc1,
-                "online_val_y_acc5": online_val_acc5
-            }
+            #online_val_loss = weighted_mean(outs, "val_online_loss", "batch_size")
+            #online_val_acc1 = weighted_mean(outs, "val_online_acc1", "batch_size")
+            #online_val_acc5 = weighted_mean(outs, "val_online_acc5", "batch_size")
+
+            #log = {
+            #    "online_val_y_loss": online_val_loss,
+            #    "online_val_y_acc1": online_val_acc1,
+            #    "online_val_y_acc5": online_val_acc5
+            #}
             self.log_dict(log, sync_dist=True)
 

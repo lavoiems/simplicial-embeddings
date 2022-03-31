@@ -1,5 +1,5 @@
-torch==1.10.0
-torchvision==0.11.1
+torch==1.10
+torchvision==0.11
 einops
 pytorch-lightning==1.5.3
 torchmetrics==0.6.0
@@ -8,4 +8,4 @@ tqdm
 wandb
 scipy
 timm
-orion>=0.2.1
+orion

@@ -2,7 +2,7 @@
 
 ROOT_PATH=$1
 
-../../../prepare_data.sh TEST
+#../../../prepare_data.sh TEST
 
 source ~/env/bin/activate
 
@@ -29,7 +29,7 @@ python3 ../../../main_pretrain.py \
     --classifier_lr 0.2 \
     --weight_decay 1e-6 \
     --batch_size 128 \
-    --num_workers 4 \ 
+    --num_workers 4 \
     --dali \
     --brightness 0.4 \
     --contrast 0.4 \
@@ -37,12 +37,11 @@ python3 ../../../main_pretrain.py \
     --hue 0.1 \
     --gaussian_prob 1.0 0.1 \
     --solarization_prob 0.0 0.2 \
-    --num_crops_per_aug 1 1 \ 
+    --num_crops_per_aug 1 1 \
     --name "orion_sdbyol-FULL" \
     --entity il_group \
     --project VIL \
     --wandb \
-    --offline \
     --save_checkpoint \
     --method sdbyol \
     --proj_output_dim 256 \
