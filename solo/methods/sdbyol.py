@@ -230,7 +230,7 @@ class SDBYOL(BaseMomentumMethod):
             z_std = F.normalize(torch.stack(Z[: self.num_large_crops]), dim=-1).std(dim=1).mean()
         with torch.no_grad():
             y = Y[0]
-            entropy = Y*torch.log(Y).neg().sum(-1)
+            entropy = (y*torch.log(y)).neg().sum(-1)
             entropy = {
               'mu': entropy.mean(),
               'std': entropy.std()
