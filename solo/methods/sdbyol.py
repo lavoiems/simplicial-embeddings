@@ -41,17 +41,7 @@ class SoftmaxBridge(nn.Module):
 
     def forward(self, x):
         logits = x.view(-1, self.message_size, self.voc_size)
-
-        if self.tau_noise > 0:
-            tau_noise = torch.rand([logits.shape[0], logits.shape[1], 1],
-                                    dtype=logits.dtype,
-                                    device=logits.device)
-            # Recenter, scale
-            tau_noise = (tau_noise-0.5)*2*self.tau_noise
-            taus = tau_noise.exp()*self.tau
-        else:
-            taus = self.tau
-
+        taus = self.tau
         return F.softmax(logits / taus, -1).view(x.shape[0], -1)
 
 
