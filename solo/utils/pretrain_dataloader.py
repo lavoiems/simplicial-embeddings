@@ -30,6 +30,8 @@ from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
 
+from solo.utils.common_data import CompositionalDataset
+
 
 def dataset_with_index(DatasetClass: Type[Dataset]) -> Type[Dataset]:
     """Factory for datasets that also returns the data index.
@@ -523,6 +525,10 @@ def prepare_datasets(
     elif dataset in ["imagenet", "imagenet100"]:
         train_dir = data_dir / train_dir
         train_dataset = dataset_with_index(ImageFolder)(train_dir, transform)
+    
+    elif dataset == 'array':
+        train_array = np.load(data_dir / train_dir / 'train.npz')
+        train_dataset = dataset_with_index(CompositionalDataset)(train_array, transform)
 
     elif dataset == "custom":
         train_dir = data_dir / train_dir

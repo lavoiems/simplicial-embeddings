@@ -1,22 +1,3 @@
-# Copyright 2021 solo-learn development team.
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy of
-# this software and associated documentation files (the "Software"), to deal in
-# the Software without restriction, including without limitation the rights to use,
-# copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
-# Software, and to permit persons to whom the Software is furnished to do so,
-# subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all copies
-# or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-# PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
-# FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-# OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-# DEALINGS IN THE SOFTWARE.
-
 import os
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
@@ -26,6 +7,8 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
+
+from solo.utils.common_data import CompositionalDataset
 
 
 def build_custom_pipeline():
@@ -53,6 +36,18 @@ def build_custom_pipeline():
         ),
     }
     return pipeline
+
+
+def prepare_array_transform(data_path: str) -> Tuple[nn.Module, nn.Module]:
+    stats = read_stats(data_path / 'stats.npz')
+    mean, std = stats['mean'], stats['std']
+    T = transform.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std)
+        ]
+    )
+    return T, T
 
 
 def prepare_transforms(dataset: str) -> Tuple[nn.Module, nn.Module]:
@@ -178,7 +173,7 @@ def prepare_datasets(
     else:
         val_dir = Path(val_dir)
 
-    assert dataset in ["cifar10", "cifar100", "stl10", "imagenet", "imagenet100", "custom"]
+    assert dataset in ["cifar10", "cifar100", "stl10", "imagenet", "imagenet100", "custom", "array"]
 
     if dataset in ["cifar10", "cifar100"]:
         DatasetClass = vars(torchvision.datasets)[dataset.upper()]
@@ -209,6 +204,9 @@ def prepare_datasets(
             download=download,
             transform=T_val,
         )
+    
+    elif dataset == 'array':
+        train_dataset = 
 
     elif dataset in ["imagenet", "imagenet100", "custom"]:
         train_dir = data_dir / train_dir
@@ -278,7 +276,10 @@ def prepare_data(
         Tuple[DataLoader, DataLoader]: prepared training and validation dataloader;.
     """
 
-    T_train, T_val = prepare_transforms(dataset)
+    if dataset == 'array':
+        T_train, T_val = prepare_array_transform(data_dir / train_dir)
+    else:
+        T_train, T_val = prepare_transforms(dataset)
     train_dataset, val_dataset = prepare_datasets(
         dataset,
         T_train,
