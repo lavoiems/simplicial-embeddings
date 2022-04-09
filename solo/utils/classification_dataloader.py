@@ -206,7 +206,10 @@ def prepare_datasets(
         )
     
     elif dataset == 'array':
-        train_dataset = 
+        train_array = np.load(data_dir / 'train.npz')
+        train_dataset = CompositionalDataset(train_array, transforms)
+        val_array = np.load(data_dir / 'valid.npz')
+        val_dataset = CompositionalDataset(val_array, transforms)
 
     elif dataset in ["imagenet", "imagenet100", "custom"]:
         train_dir = data_dir / train_dir
@@ -255,6 +258,7 @@ def prepare_data(
     data_dir: Optional[Union[str, Path]] = None,
     train_dir: Optional[Union[str, Path]] = None,
     val_dir: Optional[Union[str, Path]] = None,
+    dataset_K: Optional[int] = None,
     batch_size: int = 64,
     num_workers: int = 4,
     download: bool = True,
@@ -277,7 +281,7 @@ def prepare_data(
     """
 
     if dataset == 'array':
-        T_train, T_val = prepare_array_transform(data_dir / train_dir)
+        T_train, T_val = prepare_array_transform(data_dir)
     else:
         T_train, T_val = prepare_transforms(dataset)
     train_dataset, val_dataset = prepare_datasets(

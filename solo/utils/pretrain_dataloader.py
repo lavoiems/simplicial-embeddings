@@ -527,7 +527,7 @@ def prepare_datasets(
         train_dataset = dataset_with_index(ImageFolder)(train_dir, transform)
     
     elif dataset == 'array':
-        train_array = np.load(data_dir / train_dir / 'train.npz')
+        train_array = np.load(data_dir / 'train.npz')
         train_dataset = dataset_with_index(CompositionalDataset)(train_array, transform)
 
     elif dataset == "custom":
