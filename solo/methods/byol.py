@@ -162,7 +162,7 @@ class BYOL(BaseMomentumMethod):
         """
 
         out = super().training_step(batch, batch_idx)
-        class_loss = out["loss"]
+        class_loss = sum(out[f"loss_{i}"] for i in range(len(out['logits'][0])))
 
         neg_cos_sim, z_std = self._shared_step(out["feats"], out["momentum_feats"])
 
@@ -173,3 +173,4 @@ class BYOL(BaseMomentumMethod):
         self.log_dict(metrics, on_epoch=True, sync_dist=True)
 
         return neg_cos_sim + class_loss
+

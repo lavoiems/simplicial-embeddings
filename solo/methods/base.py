@@ -239,7 +239,8 @@ class BaseMethod(pl.LightningModule):
         else:
             self.features_dim = self.backbone.num_features
 
-        self.classifier = nn.Linear(self.features_dim, num_classes)
+        self.classifiers = [nn.Linear(self.features_dim, nc) for nc in num_classes]
+        self.classifiers = nn.ModuleList(self.classifiers)
 
         if self.knn_eval:
             self.knn = WeightedKNNClassifier(k=self.knn_k, distance_fx="euclidean")
@@ -327,14 +328,15 @@ class BaseMethod(pl.LightningModule):
                 list of dicts containing learnable parameters and possible settings.
         """
 
-        return [
+        params = [{
+            "name": f"classifier_{i}",
+            "params": classifier.parameters(),
+            "lr": self.classifier_lr,
+            "weight_decay": 0,
+        } for i, classifier in enumerate(self.classifiers)]
+
+        return params + [
             {"name": "backbone", "params": self.backbone.parameters()},
-            {
-                "name": "classifier",
-                "params": self.classifier.parameters(),
-                "lr": self.classifier_lr,
-                "weight_decay": 0,
-            },
         ]
 
     def configure_optimizers(self) -> Tuple[List, List]:
@@ -421,7 +423,7 @@ class BaseMethod(pl.LightningModule):
         """
 
         feats = self.backbone(X)
-        logits = self.classifier(feats.detach())
+        logits = [classifier(feats.detach()) for classifier in self.classifiers]
         return {
             "logits": logits,
             "feats": feats,
@@ -440,14 +442,13 @@ class BaseMethod(pl.LightningModule):
         """
 
         out = self.base_forward(X)
+
         logits = out["logits"]
 
-        loss = F.cross_entropy(logits, targets, ignore_index=-1)
-        # handle when the number of classes is smaller than 5
-        top_k_max = min(5, logits.size(1))
-        acc1, acc5 = accuracy_at_k(logits, targets, top_k=(1, top_k_max))
+        losses = {f'loss_{i}': F.cross_entropy(logit, targets[:,i]) for i, logit in enumerate(logits)}
+        acc1 = {f'acc1_{i}': accuracy_at_k(logit, targets[:,i], top_k=(1,))[0] for i, logit in enumerate(logits)}
 
-        return {**out, "loss": loss, "acc1": acc1, "acc5": acc5}
+        return {**out, **losses, **acc1}
 
     def training_step(self, batch: List[Any], batch_idx: int) -> Dict[str, Any]:
         """Training step for pytorch lightning. It does all the shared operations, such as
@@ -476,15 +477,12 @@ class BaseMethod(pl.LightningModule):
             outs["feats"].extend([self.backbone(x) for x in X[self.num_large_crops :]])
 
         # loss and stats
-        outs["loss"] = sum(outs["loss"]) / self.num_large_crops
-        outs["acc1"] = sum(outs["acc1"]) / self.num_large_crops
-        outs["acc5"] = sum(outs["acc5"]) / self.num_large_crops
-
-        metrics = {
-            "train_class_loss": outs["loss"],
-            "train_acc1": outs["acc1"],
-            "train_acc5": outs["acc5"],
-        }
+        metrics = {}
+        for i in range(len(outs['logits'][0])):
+            outs[f"loss_{i}"] = sum(outs[f"loss_{i}"]) / self.num_large_crops
+            outs[f"acc1_{i}"] = sum(outs[f"acc1_{i}"]) / self.num_large_crops
+            metrics[f'train_class_loss_{i}'] = outs[f'loss_{i}']
+            metrics[f'train_acc1_{i}'] = outs[f'acc1_{i}']
 
         self.log_dict(metrics, on_epoch=True, sync_dist=True)
 
@@ -513,20 +511,21 @@ class BaseMethod(pl.LightningModule):
                 and accuracies.
         """
 
-        X, targets = batch
-        batch_size = targets.size(0)
+        for k, ds in batch.items():
+            X, targets = ds
+            batch_size = targets.size(0)
+            metrics = {'batch_size': batch_size}
 
-        out = self._base_shared_step(X, targets)
+            out = self._base_shared_step(X, targets)
 
-        if self.knn_eval and not self.trainer.sanity_checking:
-            self.knn(test_features=out.pop("feats").detach(), test_targets=targets.detach())
+            if self.knn_eval and not self.trainer.sanity_checking:
+                self.knn(test_features=out.pop("feats").detach(), test_targets=targets.detach())
 
-        metrics = {
-            "batch_size": batch_size,
-            "val_loss": out["loss"],
-            "val_acc1": out["acc1"],
-            "val_acc5": out["acc5"],
-        }
+            metrics = {'batch_size': batch_size}
+            for i in range(len(out['logits'])):
+                metrics[f'val_loss_{i}_{k}'] = out[f'loss_{i}']
+                metrics[f'val_acc1_{i}_{k}'] = out[f'acc1_{i}']
+
         return metrics
 
     def validation_epoch_end(self, outs: List[Dict[str, Any]]):
@@ -538,11 +537,7 @@ class BaseMethod(pl.LightningModule):
             outs (List[Dict[str, Any]]): list of outputs of the validation step.
         """
 
-        val_loss = weighted_mean(outs, "val_loss", "batch_size")
-        val_acc1 = weighted_mean(outs, "val_acc1", "batch_size")
-        val_acc5 = weighted_mean(outs, "val_acc5", "batch_size")
-
-        log = {"val_loss": val_loss, "val_acc1": val_acc1, "val_acc5": val_acc5}
+        log = {k: weighted_mean(outs, k, 'batch_size') for k in outs[0].keys() if k != 'batch_size'}
 
         if self.knn_eval and not self.trainer.sanity_checking:
             val_knn_acc1, val_knn_acc5 = self.knn.compute()
@@ -803,19 +798,20 @@ class BaseMomentumMethod(BaseMethod):
 
         parent_metrics = super().validation_step(batch, batch_idx)
 
-        X, targets = batch
-        batch_size = targets.size(0)
-
-        out = self._shared_step_momentum(X, targets)
-
         metrics = None
-        if self.momentum_classifier is not None:
-            metrics = {
-                "batch_size": batch_size,
-                "momentum_val_loss": out["loss"],
-                "momentum_val_acc1": out["acc1"],
-                "momentum_val_acc5": out["acc5"],
-            }
+        for k, ds in batch.items():
+            X, targets = ds
+            batch_size = targets.size(0)
+
+            out = self._shared_step_momentum(X, targets)
+
+            if self.momentum_classifier is not None:
+                metrics = {
+                    "batch_size": batch_size,
+                    "momentum_val_loss": out["loss"],
+                    "momentum_val_acc1": out["acc1"],
+                    "momentum_val_acc5": out["acc5"],
+                }
 
         return parent_metrics, metrics
 

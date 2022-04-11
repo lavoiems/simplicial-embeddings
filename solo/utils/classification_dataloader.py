@@ -2,13 +2,27 @@ import os
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
 
+import numpy as np
 import torchvision
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
 
-from solo.utils.common_data import CompositionalDataset
+from solo.utils.common_data import ArrayDataset
+
+
+class DictDataset(Dataset):
+    def __init__(self, datasets):
+        super().__init__()
+        self.datasets = datasets
+
+    def __len__(self):
+        d0 = list(self.datasets.values())[0] # Assuming that all datasets have same size.
+        return len(d0)
+
+    def __getitem__(self, idx):
+        return {k: v[idx] for k, v in self.datasets.items()}
 
 
 def build_custom_pipeline():
@@ -39,11 +53,10 @@ def build_custom_pipeline():
 
 
 def prepare_array_transform(data_path: str) -> Tuple[nn.Module, nn.Module]:
-    stats = read_stats(data_path / 'stats.npz')
+    stats = np.load(data_path / 'stats.npz')
     mean, std = stats['mean'], stats['std']
-    T = transform.Compose(
+    T = transforms.Compose(
         [
-            transforms.ToTensor(),
             transforms.Normalize(mean, std)
         ]
     )
@@ -204,12 +217,16 @@ def prepare_datasets(
             download=download,
             transform=T_val,
         )
-    
+
     elif dataset == 'array':
         train_array = np.load(data_dir / 'train.npz')
-        train_dataset = CompositionalDataset(train_array, transforms)
-        val_array = np.load(data_dir / 'valid.npz')
-        val_dataset = CompositionalDataset(val_array, transforms)
+        train_dataset = ArrayDataset(train_array, T_train)
+        in_val_array = np.load(data_dir / 'in_valid.npz')
+        in_val_dataset = ArrayDataset(in_val_array, T_val)
+        out_val_array = np.load(data_dir / 'out_valid.npz')
+        out_val_dataset = ArrayDataset(out_val_array, T_val)
+        val_dataset = {'iid': in_val_dataset, 'ood': out_val_dataset}
+        val_dataset = DictDataset(val_dataset)
 
     elif dataset in ["imagenet", "imagenet100", "custom"]:
         train_dir = data_dir / train_dir

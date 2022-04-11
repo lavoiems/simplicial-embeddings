@@ -20,6 +20,7 @@
 import os
 from argparse import Namespace
 from contextlib import suppress
+import numpy as np
 
 
 N_CLASSES_PER_DATASET = {
@@ -54,6 +55,10 @@ def additional_setup_pretrain(args: Namespace):
 
     if args.dataset in N_CLASSES_PER_DATASET:
         args.num_classes = N_CLASSES_PER_DATASET[args.dataset]
+    elif args.dataset == 'array':
+        dir_path = args.data_dir
+        classes = np.load(dir_path / 'train.npz')['latents_classes']
+        args.num_classes = [len(np.unique(classes[:, i])) for i in range(classes.shape[1])]
     else:
         # hack to maintain the current pipeline
         # even if the custom dataset doesn't have any labels

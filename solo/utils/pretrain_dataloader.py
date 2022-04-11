@@ -18,6 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
+import numpy as np
 import random
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Sequence, Type, Union
@@ -30,7 +31,7 @@ from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
 
-from solo.utils.common_data import CompositionalDataset
+from solo.utils.common_data import ArrayDataset
 
 
 def dataset_with_index(DatasetClass: Type[Dataset]) -> Type[Dataset]:
@@ -430,7 +431,74 @@ class CustomTransform(BaseTransform):
         )
 
 
-def prepare_transform(dataset: str, **kwargs) -> Any:
+class ArrayTransform(BaseTransform):
+    def __init__(
+        self,
+        data_dir: str,
+        brightness: float,
+        contrast: float,
+        saturation: float,
+        hue: float,
+        color_jitter_prob: float = 0.8,
+        gray_scale_prob: float = 0.2,
+        horizontal_flip_prob: float = 0.5,
+        gaussian_prob: float = 0.5,
+        solarization_prob: float = 0.0,
+        min_scale: float = 0.08,
+        max_scale: float = 1.0,
+        crop_size: int = 64,
+    ):
+        """Class that applies Cifar10/Cifar100 transformations.
+
+        Args:
+            cifar (str): type of cifar, either cifar10 or cifar100.
+            brightness (float): sampled uniformly in [max(0, 1 - brightness), 1 + brightness].
+            contrast (float): sampled uniformly in [max(0, 1 - contrast), 1 + contrast].
+            saturation (float): sampled uniformly in [max(0, 1 - saturation), 1 + saturation].
+            hue (float): sampled uniformly in [-hue, hue].
+            color_jitter_prob (float, optional): probability of applying color jitter.
+                Defaults to 0.8.
+            gray_scale_prob (float, optional): probability of converting to gray scale.
+                Defaults to 0.2.
+            horizontal_flip_prob (float, optional): probability of flipping horizontally.
+                Defaults to 0.5.
+            gaussian_prob (float, optional): probability of applying gaussian blur.
+                Defaults to 0.0.
+            solarization_prob (float, optional): probability of applying solarization.
+                Defaults to 0.0.
+            min_scale (float, optional): minimum scale of the crops. Defaults to 0.08.
+            max_scale (float, optional): maximum scale of the crops. Defaults to 1.0.
+            crop_size (int, optional): size of the crop. Defaults to 32.
+        """
+
+        super().__init__()
+
+        stats = np.load(data_dir / 'stats.npz')
+        mean = stats['mean']
+        std = stats['std']
+        print(mean, std)
+
+        self.transform = transforms.Compose(
+            [
+                #transforms.RandomResizedCrop(
+                #    (crop_size, crop_size),
+                #    scale=(min_scale, max_scale),
+                #    interpolation=transforms.InterpolationMode.BICUBIC,
+                #),
+                transforms.Normalize(mean, std),
+                #transforms.RandomApply(
+                #    [transforms.ColorJitter(brightness, contrast, saturation, hue)],
+                #    p=color_jitter_prob,
+                #),
+                transforms.RandomGrayscale(p=gray_scale_prob),
+                #transforms.RandomApply([GaussianBlur()], p=gaussian_prob),
+                #transforms.RandomApply([Solarization()], p=solarization_prob),
+                transforms.RandomHorizontalFlip(p=horizontal_flip_prob),
+            ]
+        )
+
+
+def prepare_transform(data_dir: str, dataset: str, **kwargs) -> Any:
     """Prepares transforms for a specific dataset. Optionally uses multi crop.
 
     Args:
@@ -448,6 +516,8 @@ def prepare_transform(dataset: str, **kwargs) -> Any:
         return ImagenetTransform(**kwargs)
     elif dataset == "custom":
         return CustomTransform(**kwargs)
+    elif dataset == 'array':
+        return ArrayTransform(data_dir, **kwargs)
     else:
         raise ValueError(f"{dataset} is not currently supported.")
 
@@ -525,10 +595,10 @@ def prepare_datasets(
     elif dataset in ["imagenet", "imagenet100"]:
         train_dir = data_dir / train_dir
         train_dataset = dataset_with_index(ImageFolder)(train_dir, transform)
-    
+
     elif dataset == 'array':
         train_array = np.load(data_dir / 'train.npz')
-        train_dataset = dataset_with_index(CompositionalDataset)(train_array, transform)
+        train_dataset = dataset_with_index(ArrayDataset)(train_array, transform)
 
     elif dataset == "custom":
         train_dir = data_dir / train_dir
