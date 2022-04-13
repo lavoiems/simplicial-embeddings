@@ -32,7 +32,6 @@ python3 ../../../main_linear.py \
     --entity il_group \
     --project VIL \
     --save_checkpoint \
-    --offline \
     --taus 2 3 \
     --lrs 0.1 0.05 \
     --wd1 0  \
