@@ -125,6 +125,7 @@ def main():
         wandb_logger = WandbLogger(
             name=args.name,
             #  id=args.name,
+            group=args.group,
             save_dir=args.checkpoint_dir,
             project=args.project,
             entity=args.entity,

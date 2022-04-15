@@ -149,9 +149,16 @@ def main():
     callbacks = []
 
     # wandb logging
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
     if args.wandb:
         wandb_logger = WandbLogger(
-            name=args.name, project=args.project, entity=args.entity, offline=args.offline
+            name=args.name,
+            project=args.project,
+            save_dir=args.checkpoint_dir,
+            group=args.group,
+            entity=args.entity,
+            offline=args.offline
         )
         wandb_logger.watch(model, log="gradients", log_freq=100)
         wandb_logger.log_hyperparams(args)

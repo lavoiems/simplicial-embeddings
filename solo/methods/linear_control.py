@@ -54,6 +54,7 @@ class LinearModel(pl.LightningModule):
         wd1: Sequence[float],
         wd2: Sequence[float],
         taus: Sequence[float],
+        eval_taus: Sequence[float],
         class_base: bool,
         weight_decay: float,
         exclude_bias_n_norm: bool,
@@ -101,6 +102,7 @@ class LinearModel(pl.LightningModule):
         self.wd1 = wd1
         self.wd2 = wd2
         self.taus = taus
+        self.eval_taus = eval_taus
         self.class_base = class_base
 
         if self.class_base:
@@ -150,8 +152,9 @@ class LinearModel(pl.LightningModule):
         # all the other parameters
         self.extra_args = kwargs
 
-        for param in self.backbone.parameters():
-            param.requires_grad = False
+        # Freeze backbone components
+        self.backbone.requires_grad_(False)
+        self.embedder.requires_grad_(False)
 
     @staticmethod
     def add_model_specific_args(parent_parser: ArgumentParser) -> ArgumentParser:
@@ -183,12 +186,14 @@ class LinearModel(pl.LightningModule):
         parser.add_argument("--wd2", type=float, nargs='+', default=[0, 1e-8, 1e-6])
         parser.add_argument("--class_base", type=eval, default=False)
         parser.add_argument("--taus", type=float, nargs='+', default=[0.5, 1, 2, 3, 5])
+        parser.add_argument("--eval_taus", type=float, nargs='+', default=[0.5, 1, 2, 3, 5])
         parser.add_argument("--num_workers", type=int, default=4)
 
         # wandb
         parser.add_argument("--name")
         parser.add_argument("--project")
         parser.add_argument("--entity", default=None, type=str)
+        parser.add_argument("--group", default=None, type=str)
         parser.add_argument("--wandb", action="store_true")
         parser.add_argument("--offline", action="store_true")
 
@@ -229,7 +234,8 @@ class LinearModel(pl.LightningModule):
 
         with torch.no_grad():
             feats = self.backbone(X)
-        return {"feats": feats}
+            emb = self.embedder(feats)
+        return {"feats": feats, "emb": emb}
         #logits = self.classifier(feats)
         #return {"logits": logits, "feats": feats}
 
@@ -312,7 +318,7 @@ class LinearModel(pl.LightningModule):
         return loss, acc1
 
     def shared_step(
-        self, X, target, batch_idx: int
+        self, X, target, batch_idx: int, taus=None,
     ) -> Tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Performs operations that are shared between the training nd validation steps.
 
@@ -327,7 +333,9 @@ class LinearModel(pl.LightningModule):
 
         batch_size = X.size(0)
 
-        feats = self(X)['feats']
+        outs = self(X)
+        feats = outs['feats']
+        emb = outs['emb']
         losses = {}
         accs1 = {}
         for lr in self.lrs:
@@ -335,37 +343,37 @@ class LinearModel(pl.LightningModule):
                 key = f'lr:{lr}_wd1:{wd1}_wd2:0'.replace('.', '')
 
                 with torch.no_grad():
-                    emb = self.embedder(feats)
-                    feats_tau = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+                    for tau1 in self.taus:
+                        feats_tau[tau1] = {tau2: F.softmax(emb/tau2, -1).view(emb.shape[0], -1) for tau2 in (taus or [tau1,])}
 
                 if self.class_base:
                     losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, wd1, 0)
                     losses[f'loss_{key}_base'], accs1[f'acc1_{key}_base'] = self.get_metrics(emb.view(emb.shape[0], -1), target, self.classifiers_base[key], lr, wd1, 0)
+
                 classifiers_y = self.classifiers_y[key]
-                metrics_tau = {k: self.get_metrics(v, target, classifier, lr, wd1, 0) for (k, v), classifier in zip(feats_tau.items(), classifiers_y)}
-                losses_tau = {f'loss_{key}_tau:{k}': v[0] for k, v in metrics_tau.items()}
-                accs1_tau = {f'acc1_{key}_tau:{k}': v[1] for k, v in metrics_tau.items()}
-                losses.update(losses_tau)
-                accs1.update(accs1_tau)
+                metrics_tau = {tau1: {tau2: self.get_metrics(v, target, classifier, lr, wd1, 0) for (tau2, v) in vs.items()} for (tau1, vs), classifier in zip(feats_tau.items(), classifiers_y)}
+                for tau1, vs in metrics_tau.items():
+                    for tau2, (loss, acc1) in vs.items():
+                        losses[f'loss_{key}_tau:{tau1}_etau:{tau2}'] = loss
+                        accs1[f'acc1_{key}_tau:{tau1}_etau:{tau2}'] = acc1
 
             for wd2 in self.wd2:
                 key = f'lr:{lr}_wd1:0_wd2:{wd2}'.replace('.', '')
 
-
                 with torch.no_grad():
-                    emb = self.embedder(feats)
-                    feats_tau = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+                    for tau1 in self.taus:
+                        feats_tau[tau1] = {tau2: F.softmax(emb/tau2, -1).view(emb.shape[0], -1) for tau2 in (taus or [tau1,])}
 
                 if self.class_base:
-                    losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, 0, wd2)
-                    losses[f'loss_{key}_base'], accs1[f'acc1_{key}_base'] = self.get_metrics(emb.view(emb.shape[0], -1), target, self.classifiers_base[key], lr, 0, wd2)
+                    losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, wd1, 0)
+                    losses[f'loss_{key}_base'], accs1[f'acc1_{key}_base'] = self.get_metrics(emb.view(emb.shape[0], -1), target, self.classifiers_base[key], lr, wd1, 0)
 
                 classifiers_y = self.classifiers_y[key]
-                metrics_tau = {k: self.get_metrics(v, target, classifier, lr, 0, wd2) for (k, v), classifier in zip(feats_tau.items(), classifiers_y)}
-                losses_tau = {f'loss_{key}_tau:{k}': v[0] for k, v in metrics_tau.items()}
-                accs1_tau = {f'acc1_{key}_tau:{k}': v[1] for k, v in metrics_tau.items()}
-                losses.update(losses_tau)
-                accs1.update(accs1_tau)
+                metrics_tau = {tau1: {tau2: self.get_metrics(v, target, classifier, lr, 0, wd2) for (tau2, v) in vs.items()} for (tau1, vs), classifier in zip(feats_tau.items(), classifiers_y)}
+                for tau1, vs in metrics_tau.items():
+                    for tau2, (loss, acc1) in vs.items():
+                        losses[f'loss_{key}_tau:{tau1}_etau:{tau2}'] = loss
+                        accs1[f'acc1_{key}_tau:{tau1}_etau:{tau2}'] = acc1
 
         return batch_size, losses, accs1
 
@@ -382,6 +390,7 @@ class LinearModel(pl.LightningModule):
 
         # set backbone to eval mode
         self.backbone.eval()
+        self.embedder.eval()  # There was a bug here.
 
         X, target = batch
         _, losses, accs1 = self.shared_step(X, target, batch_idx)
@@ -412,7 +421,7 @@ class LinearModel(pl.LightningModule):
         """
 
         X, target = batch
-        batch_size, losses, accs1 = self.shared_step(X, target, batch_idx)
+        batch_size, losses, accs1 = self.shared_step(X, target, batch_idx, taus=self.eval_taus)
         losses = {f'val_{k}': v for k, v in losses.items()}
         accs1 = {f'val_{k}': v for k, v in accs1.items()}
 
