@@ -365,8 +365,8 @@ class LinearModel(pl.LightningModule):
                         feats_tau[tau1] = {tau2: F.softmax(emb/tau2, -1).view(emb.shape[0], -1) for tau2 in (taus or [tau1,])}
 
                 if self.class_base:
-                    losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, wd1, 0)
-                    losses[f'loss_{key}_base'], accs1[f'acc1_{key}_base'] = self.get_metrics(emb.view(emb.shape[0], -1), target, self.classifiers_base[key], lr, wd1, 0)
+                    losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, 0, wd2)
+                    losses[f'loss_{key}_base'], accs1[f'acc1_{key}_base'] = self.get_metrics(emb.view(emb.shape[0], -1), target, self.classifiers_base[key], lr, 0, wd2)
 
                 classifiers_y = self.classifiers_y[key]
                 metrics_tau = {tau1: {tau2: self.get_metrics(v, target, classifier, lr, 0, wd2) for (tau2, v) in vs.items()} for (tau1, vs), classifier in zip(feats_tau.items(), classifiers_y)}
