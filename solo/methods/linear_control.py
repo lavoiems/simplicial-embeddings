@@ -338,6 +338,7 @@ class LinearModel(pl.LightningModule):
         emb = outs['emb']
         losses = {}
         accs1 = {}
+        feats_tau = {}
         for lr in self.lrs:
             for wd1 in self.wd1:
                 key = f'lr:{lr}_wd1:{wd1}_wd2:0'.replace('.', '')
