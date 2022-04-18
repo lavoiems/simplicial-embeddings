@@ -50,7 +50,7 @@ from solo.utils.lars import LARSWrapper
 from solo.utils.metrics import accuracy_at_k, weighted_mean
 from solo.utils.momentum import MomentumUpdater, initialize_momentum_params
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
-from torchvision.models import resnet18, resnet50
+from torchvision.models import resnet18, resnet50, wide_resnet50_2
 
 
 def static_lr(
@@ -67,6 +67,7 @@ class BaseMethod(pl.LightningModule):
     _SUPPORTED_BACKBONES = {
         "resnet18": resnet18,
         "resnet50": resnet50,
+        "wide_resnet50_2": wide_resnet50_2,
         "vit_tiny": vit_tiny,
         "vit_small": vit_small,
         "vit_base": vit_base,
