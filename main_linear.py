@@ -18,13 +18,15 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
+import json
 
 import torch
 import torch.nn as nn
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, CSVLogger
 from torchvision.models import resnet18, resnet50
+from solo.methods.linear_control import LinearModel
 
 from solo.args.setup import parse_args_linear
 from solo.methods.base import BaseMethod
@@ -47,10 +49,21 @@ else:
     _dali_avaliable = True
 import types
 
-from solo.methods.linear import LinearModel
 from solo.utils.checkpointer import Checkpointer
 from solo.utils.classification_dataloader import prepare_data
 
+class Embedder(nn.Module):
+    def __init__(self, features_dim, message_size, voc_size, **kwargs):
+        super().__init__()
+        self.embedder = nn.Sequential(
+                            nn.Linear(features_dim, message_size*voc_size, bias=False),
+                            nn.BatchNorm1d(message_size*voc_size))
+        self.message_size = message_size
+        self.voc_size = voc_size
+
+    def forward(self, x):
+        o = self.embedder(x)
+        return o.view(x.shape[0], self.message_size, self.voc_size)
 
 def main():
     args = parse_args_linear()
@@ -76,7 +89,11 @@ def main():
     if "swin" in args.backbone and cifar:
         kwargs["window_size"] = 4
 
+    args_path = os.path.join('/'.join(args.pretrained_feature_extractor.split('/')[:-1]), 'args.json')
+    pretrain_args = json.load(open(args_path, 'r'))
+
     backbone = backbone_model(**kwargs)
+    embedder = Embedder(backbone.fc.in_features, **pretrain_args)
     if "resnet" in args.backbone:
         # remove fc layer
         backbone.fc = nn.Identity()
@@ -101,8 +118,10 @@ def main():
             )
         if "backbone" in k:
             state[k.replace("backbone.", "")] = state[k]
-        del state[k]
+        if 'embedder' not in k:
+            del state[k]
     backbone.load_state_dict(state, strict=False)
+    embedder.load_state_dict(state, strict=False)
 
     print(f"loaded {ckpt_path}")
 
@@ -113,7 +132,10 @@ def main():
         Class = LinearModel
 
     del args.backbone
-    model = Class(backbone, **args.__dict__)
+    backbone.cuda()
+    embedder.cuda()
+
+    model = Class(backbone, embedder, voc_size=pretrain_args['voc_size'], message_size=pretrain_args['message_size'], **args.__dict__)
 
     train_loader, val_loader = prepare_data(
         args.dataset,
@@ -127,9 +149,16 @@ def main():
     callbacks = []
 
     # wandb logging
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
     if args.wandb:
         wandb_logger = WandbLogger(
-            name=args.name, project=args.project, entity=args.entity, offline=args.offline
+            name=args.name,
+            project=args.project,
+            save_dir=args.checkpoint_dir,
+            group=args.group,
+            entity=args.entity,
+            offline=args.offline
         )
         wandb_logger.watch(model, log="gradients", log_freq=100)
         wandb_logger.log_hyperparams(args)
@@ -147,6 +176,12 @@ def main():
         )
         callbacks.append(ckpt)
 
+    run_dir = os.path.dirname(ckpt_path)
+    csv_logger = CSVLogger(
+        save_dir=run_dir, name=f'classifier'
+    )
+    csv_logger.log_hyperparams(args)
+
     # 1.7 will deprecate resume_from_checkpoint, but for the moment
     # the argument is the same, but we need to pass it as ckpt_path to trainer.fit
     if args.resume_from_checkpoint is not None:
@@ -157,8 +192,9 @@ def main():
 
     trainer = Trainer.from_argparse_args(
         args,
-        logger=wandb_logger if args.wandb else None,
+        logger=wandb_logger if args.wandb else csv_logger,
         callbacks=callbacks,
+        plugins=DDPPlugin(find_unused_parameters=True) if args.accelerator == 'ddp' else None,
         enable_checkpointing=False,
     )
     if args.dali:

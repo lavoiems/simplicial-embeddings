@@ -32,26 +32,15 @@ from solo.utils.metrics import accuracy_at_k, weighted_mean
 
 
 class SoftmaxBridge(nn.Module):
-    def __init__(self, message_size, voc_size, tau, tau_noise=0, **kwargs):
+    def __init__(self, message_size, voc_size, tau, **kwargs):
         super().__init__()
         self.message_size = message_size
         self.voc_size = voc_size
         self.tau = tau
-        self.tau_noise = tau_noise
 
     def forward(self, x):
         logits = x.view(-1, self.message_size, self.voc_size)
-
-        if self.tau_noise > 0:
-            tau_noise = torch.rand([logits.shape[0], logits.shape[1], 1],
-                                    dtype=logits.dtype,
-                                    device=logits.device)
-            # Recenter, scale
-            tau_noise = (tau_noise-0.5)*2*self.tau_noise
-            taus = tau_noise.exp()*self.tau
-        else:
-            taus = self.tau
-
+        taus = self.tau
         return F.softmax(logits / taus, -1).view(x.shape[0], -1)
 
 
@@ -63,6 +52,7 @@ class SDBYOL(BaseMomentumMethod):
         pred_hidden_dim: int,
         message_size: int,
         voc_size: int,
+        taus: Sequence[float],
         tau_online: float,
         tau_target: float,
         **kwargs,
@@ -83,8 +73,9 @@ class SDBYOL(BaseMomentumMethod):
 
         # Online
         self.embedder = nn.Sequential(
-                            nn.Linear(self.features_dim, message_size*voc_size, bias=False),
-                            nn.BatchNorm1d(message_size*voc_size))
+                             nn.Linear(self.features_dim, message_size*voc_size, bias=False),
+                             nn.BatchNorm1d(message_size*voc_size)
+                        )
         self.softmax = SoftmaxBridge(message_size, voc_size, tau_online, **kwargs)
 
         self.projector = nn.Sequential(
@@ -96,8 +87,9 @@ class SDBYOL(BaseMomentumMethod):
 
         # Momentum
         self.momentum_embedder = nn.Sequential(
-                            nn.Linear(self.features_dim, message_size*voc_size, bias=False),
-                            nn.BatchNorm1d(message_size*voc_size))
+                             nn.Linear(self.features_dim, message_size*voc_size, bias=False),
+                             nn.BatchNorm1d(message_size*voc_size)
+                        )
         self.momentum_softmax = SoftmaxBridge(message_size, voc_size, tau_target, **kwargs)
 
 
@@ -119,7 +111,7 @@ class SDBYOL(BaseMomentumMethod):
         )
 
         # Y classifiers
-        self.taus = [5e-2, 1e-1, 0.5, 1, 2]
+        self.taus = taus
         self.linears_y = [torch.nn.Linear(message_size*voc_size, self.num_classes) for _ in range(len(self.taus))]
         self.linears_y = nn.ModuleList(self.linears_y)
         #self.momentum_linear_y = torch.nn.Linear(message_size*voc_size, self.num_classes)
@@ -135,6 +127,7 @@ class SDBYOL(BaseMomentumMethod):
 
         # predictor
         parser.add_argument("--pred_hidden_dim", type=int, default=512)
+        parser.add_argument("--taus", type=float, nargs='+', default=[1, 2])
 
         # Softmax bottleneck
         parser.add_argument("--voc_size", type=int, default=10)
@@ -165,7 +158,6 @@ class SDBYOL(BaseMomentumMethod):
             {"params": self.predictor.parameters()},
             {"params": self.embedder.parameters()}
         ]
-
 
         return super().learnable_params + extra_learnable_params
 
@@ -198,7 +190,7 @@ class SDBYOL(BaseMomentumMethod):
         return {**out, "z": z, "p": p, "y": y, "emb": emb}
 
     def _class_step(self, X, targets, classifier):
-        logits = classifier(X)
+        logits = classifier(X.detach())
 
         loss = F.cross_entropy(logits, targets, ignore_index=-1)
         acc1, acc5 = accuracy_at_k(logits, targets, top_k=(1, 5))
@@ -236,8 +228,9 @@ class SDBYOL(BaseMomentumMethod):
               'std': entropy.std()
             }
 
-        emb = embs[0].view(-1, self.message_size, self.voc_size)
-        outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+        with torch.no_grad():
+            emb = embs[0].view(-1, self.message_size, self.voc_size)
+            outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
         online_class = [self._class_step(outs_y[tau], targets, linear_y) for tau, linear_y in zip(self.taus, self.linears_y)]
         online_class = {
             f"online_y_{tau}_" + k: v for tau, oc in zip(self.taus, online_class) for k, v in oc.items()
