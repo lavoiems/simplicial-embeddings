@@ -216,7 +216,7 @@ class SDMoCoV2Plus(BaseMomentumMethod):
         return {**out, "z": z, "y": y, "emb": emb}
 
     def _class_step(self, X, targets, classifier):
-        logits = classifier(X)
+        logits = classifier(X.detach())
 
         loss = F.cross_entropy(logits, targets, ignore_index=-1)
         acc1, acc5 = accuracy_at_k(logits, targets, top_k=(1, 5))
@@ -280,8 +280,9 @@ class SDMoCoV2Plus(BaseMomentumMethod):
               'std': entropy.std()
             }
 
-        emb = embs1.view(-1, self.message_size, self.voc_size)
-        outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
+        with torch.no_grad():
+            emb = embs1.view(-1, self.message_size, self.voc_size)
+            outs_y = {tau: F.softmax(emb/tau, -1).view(emb.shape[0], -1) for tau in self.taus}
         online_class = [self._class_step(outs_y[tau], targets, linear_y) for tau, linear_y in zip(self.taus, self.linears_y)]
         online_class = {
             f"online_y_{tau}_" + k: v for tau, oc in zip(self.taus, online_class) for k, v in oc.items()
