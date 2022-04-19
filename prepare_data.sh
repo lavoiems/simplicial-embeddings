@@ -17,8 +17,8 @@ then
   SRC_VAL=/network/scratch/l/lavoiems/data/imagenet_val.tar
 else
   echo "In CC - $mila"
-  SRC_TRAIN=/network/scratch/lavoiems/data/ILSVRC2012_img_train.tar
-  SRC_VAL=/network/scratch/lavoiems/data/imagenet_val.tar
+  SRC_TRAIN=/scratch/lavoiems/data/ILSVRC2012_img_train.tar
+  SRC_VAL=/scratch/lavoiems/data/imagenet_val.tar
 fi
 TRG=$SLURM_TMPDIR/data
 TRG_TRAIN=$TRG/train
