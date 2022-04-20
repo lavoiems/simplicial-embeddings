@@ -21,6 +21,10 @@ class AutoResumer:
         "name",
         "project",
         "entity",
+        "message_size",
+        "voc_size",
+        "tau_online",
+        "tau_target"
     ]
 
     def __init__(
