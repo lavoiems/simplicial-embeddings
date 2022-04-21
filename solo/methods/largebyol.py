@@ -178,7 +178,7 @@ class LBYOL(BaseMomentumMethod):
         return {**out, "z": z, "p": p, "y": y, "emb": emb}
 
     def _class_step(self, X, targets, classifier):
-        logits = classifier(X)
+        logits = classifier(X.detach())
 
         loss = F.cross_entropy(logits, targets, ignore_index=-1)
         acc1, acc5 = accuracy_at_k(logits, targets, top_k=(1, 5))
