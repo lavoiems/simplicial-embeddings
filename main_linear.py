@@ -67,6 +67,10 @@ class Embedder(nn.Module):
 
 def main():
     args = parse_args_linear()
+    if args.linear_base:
+        from solo.methods.linear import LinearModel
+    else:
+        from solo.methods.linear_control import LinearModel
 
     assert args.backbone in BaseMethod._SUPPORTED_BACKBONES
     backbone_model = {
@@ -93,7 +97,7 @@ def main():
     pretrain_args = json.load(open(args_path, 'r'))
 
     backbone = backbone_model(**kwargs)
-    embedder = Embedder(backbone.fc.in_features, **pretrain_args)
+    in_features = backbone.fc.in_features
     if "resnet" in args.backbone:
         # remove fc layer
         backbone.fc = nn.Identity()
@@ -121,7 +125,12 @@ def main():
         if 'embedder' not in k:
             del state[k]
     backbone.load_state_dict(state, strict=False)
-    embedder.load_state_dict(state, strict=False)
+    backbone.cuda()
+
+    if not args.linear_base:
+        embedder = Embedder(in_features, **pretrain_args)
+        embedder.load_state_dict(state, strict=False)
+        embedder.cuda()
 
     print(f"loaded {ckpt_path}")
 
@@ -132,10 +141,11 @@ def main():
         Class = LinearModel
 
     del args.backbone
-    backbone.cuda()
-    embedder.cuda()
 
-    model = Class(backbone, embedder, voc_size=pretrain_args['voc_size'], message_size=pretrain_args['message_size'], **args.__dict__)
+    if not args.linear_base:
+        model = Class(backbone, embedder, voc_size=pretrain_args['voc_size'], message_size=pretrain_args['message_size'], **args.__dict__)
+    else:
+        model = Class(backbone, **args.__dict__)
 
     train_loader, val_loader = prepare_data(
         args.dataset,
@@ -144,18 +154,19 @@ def main():
         val_dir=args.val_dir,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        pretrain_augs=args.pretrain_augs,
     )
 
     callbacks = []
 
     # wandb logging
-    os.makedirs(args.checkpoint_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
+    #os.makedirs(args.checkpoint_dir, exist_ok=True)
+    #os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
     if args.wandb:
         wandb_logger = WandbLogger(
             name=args.name,
             project=args.project,
-            save_dir=args.checkpoint_dir,
+            save_dir=args.checkpoint_dir if args.save_checkpoint else None,
             group=args.group,
             entity=args.entity,
             offline=args.offline

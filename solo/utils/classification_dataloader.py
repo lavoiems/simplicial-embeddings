@@ -55,7 +55,7 @@ def build_custom_pipeline():
     return pipeline
 
 
-def prepare_transforms(dataset: str) -> Tuple[nn.Module, nn.Module]:
+def prepare_transforms(dataset: str, pretrain_augs: bool) -> Tuple[nn.Module, nn.Module]:
     """Prepares pre-defined train and test transformation pipelines for some datasets.
 
     Args:
@@ -65,15 +65,37 @@ def prepare_transforms(dataset: str) -> Tuple[nn.Module, nn.Module]:
         Tuple[nn.Module, nn.Module]: training and validation transformation pipelines.
     """
 
-    cifar_pipeline = {
-        "T_train": transforms.Compose(
-            [
-                transforms.RandomResizedCrop(size=32, scale=(0.08, 1.0)),
+    if pretrain_augs:
+        mean = (0.5071, 0.4865, 0.4409)
+        std = (0.2673, 0.2564, 0.2762)
+
+        train_transform = transforms.Compose([
+           transforms.RandomResizedCrop(
+               (32, 32),
+               scale=(0.08, 1.0),
+               interpolation=transforms.InterpolationMode.BICUBIC,
+           ),
+           transforms.RandomApply(
+               [transforms.ColorJitter(0.4, 0.4, 0.2, 0.1)],
+               p=0.8,
+           ),
+           transforms.RandomGrayscale(p=0.2),
+           transforms.RandomHorizontalFlip(p=0.5),
+           transforms.ToTensor(),
+           transforms.Normalize(mean, std),
+        ])
+
+    else:
+        train_transform = transforms.Compose([
+                transforms.RandomResizedCrop(size=32,
+                                             scale=(0.08, 1.0),
+                                             interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
-            ]
-        ),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
+
+    cifar_pipeline = {
+        "T_train": train_transform,
         "T_val": transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -135,6 +157,8 @@ def prepare_transforms(dataset: str) -> Tuple[nn.Module, nn.Module]:
     pipeline = pipelines[dataset]
     T_train = pipeline["T_train"]
     T_val = pipeline["T_val"]
+
+    print('transform training', T_train)
 
     return T_train, T_val
 
@@ -260,6 +284,7 @@ def prepare_data(
     batch_size: int = 64,
     num_workers: int = 4,
     download: bool = True,
+    pretrain_augs: bool = False,
 ) -> Tuple[DataLoader, DataLoader]:
     """Prepares transformations, creates dataset objects and wraps them in dataloaders.
 
@@ -278,7 +303,7 @@ def prepare_data(
         Tuple[DataLoader, DataLoader]: prepared training and validation dataloader;.
     """
 
-    T_train, T_val = prepare_transforms(dataset)
+    T_train, T_val = prepare_transforms(dataset, pretrain_augs)
     train_dataset, val_dataset = prepare_datasets(
         dataset,
         T_train,

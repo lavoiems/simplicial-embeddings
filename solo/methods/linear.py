@@ -17,6 +17,7 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import math
 from argparse import ArgumentParser
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -46,6 +47,9 @@ class LinearModel(pl.LightningModule):
         optimizer: str,
         lars: bool,
         lr: float,
+        lrs: Sequence[float],
+        wd1: Sequence[float],
+        wd2: Sequence[float],
         weight_decay: float,
         exclude_bias_n_norm: bool,
         extra_optimizer_args: dict,
@@ -81,10 +85,16 @@ class LinearModel(pl.LightningModule):
         super().__init__()
 
         self.backbone = backbone
+
         if hasattr(self.backbone, "inplanes"):
             features_dim = self.backbone.inplanes
         else:
             features_dim = self.backbone.num_features
+
+        self.lrs = lrs
+        self.wd1 = wd1
+        self.wd2 = wd2
+
         self.classifier = nn.Linear(features_dim, num_classes)  # type: ignore
 
         # training related
@@ -200,8 +210,13 @@ class LinearModel(pl.LightningModule):
         else:
             raise ValueError(f"{self.optimizer} not in (sgd, adam)")
 
+        params = [list(self.classifier.parameters())]
+        p = []
+        for param in params:
+            p += param
+
         optimizer = optimizer(
-            self.classifier.parameters(),
+            p,
             lr=self.lr,
             weight_decay=self.weight_decay,
             **self.extra_optimizer_args,
@@ -238,7 +253,7 @@ class LinearModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def shared_step(
-        self, batch: Tuple, batch_idx: int
+        self, X, target, batch_idx: int
     ) -> Tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Performs operations that are shared between the training nd validation steps.
 
@@ -251,10 +266,10 @@ class LinearModel(pl.LightningModule):
                 batch size, loss, accuracy @1 and accuracy @5.
         """
 
-        X, target = batch
         batch_size = X.size(0)
 
-        out = self(X)["logits"]
+        output = self(X)
+        out = output['logits']
 
         loss = F.cross_entropy(out, target)
 
@@ -275,10 +290,12 @@ class LinearModel(pl.LightningModule):
         # set backbone to eval mode
         self.backbone.eval()
 
-        _, loss, acc1, acc5 = self.shared_step(batch, batch_idx)
+        X, target = batch
+        _, loss, acc1, acc5 = self.shared_step(X, target, batch_idx)
 
         log = {"train_loss": loss, "train_acc1": acc1, "train_acc5": acc5}
         self.log_dict(log, on_epoch=True, sync_dist=True)
+
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> Dict[str, Any]:
@@ -294,7 +311,8 @@ class LinearModel(pl.LightningModule):
                 the classification loss and accuracies.
         """
 
-        batch_size, loss, acc1, acc5 = self.shared_step(batch, batch_idx)
+        X, target = batch
+        batch_size, loss, acc1, acc5 = self.shared_step(X, target, batch_idx)
 
         results = {
             "batch_size": batch_size,
@@ -312,10 +330,10 @@ class LinearModel(pl.LightningModule):
         Args:
             outs (List[Dict[str, Any]]): list of outputs of the validation step.
         """
-
         val_loss = weighted_mean(outs, "val_loss", "batch_size")
         val_acc1 = weighted_mean(outs, "val_acc1", "batch_size")
         val_acc5 = weighted_mean(outs, "val_acc5", "batch_size")
 
         log = {"val_loss": val_loss, "val_acc1": val_acc1, "val_acc5": val_acc5}
+
         self.log_dict(log, sync_dist=True)

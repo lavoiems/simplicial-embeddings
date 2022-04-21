@@ -63,6 +63,7 @@ class LinearModel(pl.LightningModule):
         min_lr: float,
         warmup_start_lr: float,
         warmup_epochs: float,
+        update_bn_stats_embed: bool,
         lr_decay_steps: Optional[Sequence[int]] = None,
         **kwargs,
     ):
@@ -104,6 +105,7 @@ class LinearModel(pl.LightningModule):
         self.taus = taus
         self.eval_taus = eval_taus
         self.class_base = class_base
+        self.update_bn_stats_embed = update_bn_stats_embed
 
         if self.class_base:
             self.classifiers = {}
@@ -186,8 +188,10 @@ class LinearModel(pl.LightningModule):
         parser.add_argument("--wd2", type=float, nargs='+', default=[0, 1e-8, 1e-6])
         parser.add_argument("--class_base", type=eval, default=False)
         parser.add_argument("--taus", type=float, nargs='+', default=[0.5, 1, 2, 3, 5])
-        parser.add_argument("--eval_taus", type=float, nargs='+', default=[0.5, 1, 2, 3, 5])
+        parser.add_argument("--eval_taus", type=float, nargs='+', default=[0.5, 1, 5])
         parser.add_argument("--num_workers", type=int, default=4)
+
+        parser.add_argument("--update_bn_stats_embed", type=eval, default=False)
 
         # wandb
         parser.add_argument("--name")
@@ -391,7 +395,8 @@ class LinearModel(pl.LightningModule):
 
         # set backbone to eval mode
         self.backbone.eval()
-        self.embedder.eval()  # There was a bug here.
+        if not self.update_bn_stats_embed:
+            self.embedder.eval()
 
         X, target = batch
         _, losses, accs1 = self.shared_step(X, target, batch_idx)

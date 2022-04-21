@@ -111,6 +111,8 @@ def parse_args_linear() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--pretrained_feature_extractor", type=str)
+    parser.add_argument("--pretrain_augs", type=eval, default=False)
+    parser.add_argument("--linear_base", type=eval, default=False)
 
     # add shared arguments
     dataset_args(parser)
