@@ -64,6 +64,8 @@ class LinearModel(pl.LightningModule):
         warmup_start_lr: float,
         warmup_epochs: float,
         update_bn_stats_embed: bool,
+        sem: bool,
+        bias: bool = True,
         lr_decay_steps: Optional[Sequence[int]] = None,
         **kwargs,
     ):
@@ -106,6 +108,7 @@ class LinearModel(pl.LightningModule):
         self.eval_taus = eval_taus
         self.class_base = class_base
         self.update_bn_stats_embed = update_bn_stats_embed
+        self.sem = sem
 
         if self.class_base:
             self.classifiers = {}
@@ -116,19 +119,19 @@ class LinearModel(pl.LightningModule):
                 key = f'lr:{lr}_wd1:{wd1}_wd2:0'.replace('.', '')
                 if self.class_base:
                     self.classifiers[key] = nn.Linear(features_dim, num_classes)
-                    self.classifiers_base[key] = nn.Linear(voc_size*message_size, num_classes)
+                    self.classifiers_base[key] = nn.Linear(voc_size*message_size, num_classes, bias=bias)
 
-                classifiers_y = [nn.Linear(voc_size*message_size, num_classes) for _ in range(len(self.taus))]   # type: ignore
+                classifiers_y = [nn.Linear(voc_size*message_size, num_classes, bias=bias) for _ in range(len(self.taus))]   # type: ignore
                 classifiers_y = nn.ModuleList(classifiers_y)
                 self.classifiers_y[key] = classifiers_y
 
             for wd2 in self.wd2:
                 key = f'lr:{lr}_wd1:0_wd2:{wd2}'.replace('.', '')
                 if self.class_base:
-                    self.classifiers[key] = nn.Linear(features_dim, num_classes)
-                    self.classifiers_base[key] = nn.Linear(voc_size*message_size, num_classes)
+                    self.classifiers[key] = nn.Linear(features_dim, num_classes, bias=bias)
+                    self.classifiers_base[key] = nn.Linear(voc_size*message_size, num_classes, bias=bias)
 
-                classifiers_y = [nn.Linear(voc_size*message_size, num_classes) for _ in range(len(self.taus))]   # type: ignore
+                classifiers_y = [nn.Linear(voc_size*message_size, num_classes, bias=bias) for _ in range(len(self.taus))]   # type: ignore
                 classifiers_y = nn.ModuleList(classifiers_y)
                 self.classifiers_y[key] = classifiers_y
         if self.class_base:
@@ -182,6 +185,7 @@ class LinearModel(pl.LightningModule):
         parser.add_argument("--lr", type=float, default=0.3)
         parser.add_argument("--classifier_lr", type=float, default=0.3)
         parser.add_argument("--weight_decay", type=float, default=0)
+        parser.add_argument("--sem", type=eval, default=True)
 
         parser.add_argument("--lrs", type=float, nargs='+', default=[0.1, 0.05, 0.5])
         parser.add_argument("--wd1", type=float, nargs='+', default=[0, 1e-8, 1e-6, 1e-4])
@@ -189,9 +193,10 @@ class LinearModel(pl.LightningModule):
         parser.add_argument("--class_base", type=eval, default=False)
         parser.add_argument("--taus", type=float, nargs='+', default=[0.5, 1, 2, 3, 5])
         parser.add_argument("--eval_taus", type=float, nargs='+', default=[0.5, 1, 5])
-        parser.add_argument("--num_workers", type=int, default=4)
+        parser.add_argument("--bias", type=eval, default=True)
 
         parser.add_argument("--update_bn_stats_embed", type=eval, default=False)
+        parser.add_argument("--num_workers", type=int, default=4)
 
         # wandb
         parser.add_argument("--name")
@@ -321,6 +326,11 @@ class LinearModel(pl.LightningModule):
         acc1 = accuracy_at_k(out, target, top_k=(1,))[0]
         return loss, acc1
 
+    def bridge(self, emb, tau):
+        if self.sem:
+            return F.softmax(emb/tau, -1).view(emb.shape[0], -1)
+        return emb.view(emb.shape[0], -1)
+
     def shared_step(
         self, X, target, batch_idx: int, taus=None,
     ) -> Tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -349,7 +359,7 @@ class LinearModel(pl.LightningModule):
 
                 with torch.no_grad():
                     for tau1 in self.taus:
-                        feats_tau[tau1] = {tau2: F.softmax(emb/tau2, -1).view(emb.shape[0], -1) for tau2 in (taus or [tau1,])}
+                        feats_tau[tau1] = {tau2: self.bridge(emb, tau2) for tau2 in (taus or [tau1,])}
 
                 if self.class_base:
                     losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, wd1, 0)
@@ -367,7 +377,7 @@ class LinearModel(pl.LightningModule):
 
                 with torch.no_grad():
                     for tau1 in self.taus:
-                        feats_tau[tau1] = {tau2: F.softmax(emb/tau2, -1).view(emb.shape[0], -1) for tau2 in (taus or [tau1,])}
+                        feats_tau[tau1] = {tau2: self.bridge(emb, tau2) for tau2 in (taus or [tau1,])}
 
                 if self.class_base:
                     losses[f'loss_{key}_z'], accs1[f'acc1_{key}_z'] = self.get_metrics(feats, target, self.classifiers[key], lr, 0, wd2)
