@@ -47,9 +47,7 @@ class LinearModel(pl.LightningModule):
         optimizer: str,
         lars: bool,
         lr: float,
-        lrs: Sequence[float],
-        wd1: Sequence[float],
-        wd2: Sequence[float],
+        bias: bool,
         weight_decay: float,
         exclude_bias_n_norm: bool,
         extra_optimizer_args: dict,
@@ -91,11 +89,8 @@ class LinearModel(pl.LightningModule):
         else:
             features_dim = self.backbone.num_features
 
-        self.lrs = lrs
-        self.wd1 = wd1
-        self.wd2 = wd2
 
-        self.classifier = nn.Linear(features_dim, num_classes)  # type: ignore
+        self.classifier = nn.Linear(features_dim, num_classes, bias=bias)  # type: ignore
 
         # training related
         self.max_epochs = max_epochs
@@ -142,6 +137,7 @@ class LinearModel(pl.LightningModule):
         parser.add_argument("--lr", type=float, default=0.3)
         parser.add_argument("--classifier_lr", type=float, default=0.3)
         parser.add_argument("--weight_decay", type=float, default=0.0001)
+        parser.add_argument("--bias", type=eval, default=True)
         parser.add_argument("--num_workers", type=int, default=4)
 
         # wandb
