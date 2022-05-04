@@ -26,7 +26,7 @@ python3 ../../../main_pretrain.py \
     --eta_lars 0.001 \
     --exclude_bias_n_norm \
     --scheduler warmup_cosine \
-    --lr 0.45 \
+    --lr 0.2 \
     --accumulate_grad_batches 8 \
     --classifier_lr 0.2 \
     --weight_decay 1e-6 \
@@ -49,7 +49,7 @@ python3 ../../../main_pretrain.py \
     --proj_output_dim 256 \
     --proj_hidden_dim 4096 \
     --pred_hidden_dim 4096 \
-    --base_tau_momentum 0.99 \
+    --base_tau_momentum 0.996 \
     --final_tau_momentum 1.0 \
     --auto_resume \
     --voc_size 21 \
