@@ -65,10 +65,22 @@ class Embedder(nn.Module):
         o = self.embedder(x)
         return o.view(x.shape[0], self.message_size, self.voc_size)
 
+
+class ICA(nn.Module):
+    def __init__(self, feats_size: int, idx: int):
+        super().__init__()
+        self.feats_ica = nn.ModuleList([nn.Linear(feats_size, feats_size, bias=False) for _ in range(5)])
+        self.idx = idx
+
+    def forward(self, X: torch.Tensor):
+        return self.feats_ica[self.idx](X)
+
 def main():
     args = parse_args_linear()
     if args.linear_base:
         from solo.methods.linear import LinearModel
+    elif args.mask:
+        from solo.methods.linear_masked import LinearModel
     else:
         from solo.methods.linear_control import LinearModel
 
@@ -122,14 +134,23 @@ def main():
             )
         if "backbone" in k:
             state[k.replace("backbone.", "")] = state[k]
-        if 'embedder' not in k:
+        if 'embedder' not in k and 'feats_ica' not in k:
             del state[k]
     backbone.load_state_dict(state, strict=False)
     backbone.cuda()
 
     if not args.linear_base:
-        embedder = Embedder(in_features, **pretrain_args)
-        embedder.load_state_dict(state, strict=False)
+        if pretrain_args['method'] == 'byol':
+            if args.ica:
+                embedder = ICA(in_features, args.ica_idx)
+                embedder.load_state_dict(state, strict=False)
+            else:
+                embedder = nn.Identity()
+            pretrain_args['voc_size'] = 1
+            pretrain_args['message_size'] = in_features
+        else:
+            embedder = Embedder(in_features, **pretrain_args)
+            embedder.load_state_dict(state, strict=False)
         embedder.cuda()
 
     print(f"loaded {ckpt_path}")
@@ -155,6 +176,7 @@ def main():
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pretrain_augs=args.pretrain_augs,
+        validation=args.validation,
     )
 
     callbacks = []

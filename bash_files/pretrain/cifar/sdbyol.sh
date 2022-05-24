@@ -1,8 +1,14 @@
-python3 ../../../main_pretrain.py \
-    --dataset $1 \
+#!/bin/bash
+
+module load python/3.8
+
+source ~/env/bin/activate
+
+python ../../../main_pretrain.py \
+    --dataset cifar100 \
     --backbone resnet18 \
-    --checkpoint_dir $2 \
-    --data_dir $SLURM_TMPDIR/data \
+    --data_dir ./datasets \
+    --checkpoint_dir $SCRATCH/checkpoint \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
@@ -14,8 +20,8 @@ python3 ../../../main_pretrain.py \
     --exclude_bias_n_norm \
     --scheduler warmup_cosine \
     --lr 1.0 \
-    --classifier_lr 0.03 \
-    --weight_decay 1e-6 \
+    --classifier_lr 0.1 \
+    --weight_decay 1e-5 \
     --batch_size 256 \
     --num_workers 4 \
     --brightness 0.4 \
@@ -26,23 +32,21 @@ python3 ../../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name sdbyol-$1 \
+    --name sdbyol_cifar_ablation \
+    --project PROJECT \
+    --entity ENTITY \
     --wandb \
-    --entity il-group \
-    --project VIL \
     --save_checkpoint \
     --method sdbyol \
     --proj_output_dim 256 \
-    --proj_hidden_dim 2048 \
-    --pred_hidden_dim 2048 \
+    --proj_hidden_dim 4096 \
+    --pred_hidden_dim 4096 \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
-    --voc_size 12 \
-    --message_size 195 \
-    --min_lr 0.1 \
-    --tau_online 1.1 \
-    --tau_target 1.1 \
-    --momentum_classifier
+    --auto_resume \
+    --momentum_classifier \
+    --voc_size 13 \
+    --message_size 5000 \
+    --tau_online 1.0 \
+    --tau_target 1.0
 
-    #--proj_hidden_dim 4096 \
-    #--pred_hidden_dim 4096 \

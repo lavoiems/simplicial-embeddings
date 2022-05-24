@@ -32,9 +32,9 @@ python3 ../../../main_linear.py \
     --entity il_group \
     --project VIL \
     --save_checkpoint \
-    --taus 2 3 \
-    --lrs 0.1 0.05 \
+    --taus 1.0 1.5 \
+    --lrs 0.2 0.5 \
     --wd1 0  \
-    --wd2 1e-6 1e-5 \
+    --wd2 1e-8 \
     --wandb
 

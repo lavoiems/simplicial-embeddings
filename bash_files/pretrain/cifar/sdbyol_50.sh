@@ -2,13 +2,13 @@
 
 module load python/3.8
 
-source ~/env/bin/activate
+source /home/mila/l/lavoiems/class_env/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
     --backbone resnet50 \
     --data_dir ./datasets \
-    --checkpoint_dir $SCRATCH/cifar_rn50 \
+    --checkpoint_dir $SCRATCH/cifar_rn50_scale \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
@@ -23,7 +23,7 @@ python ../../../main_pretrain.py \
     --classifier_lr 0.3 \
     --weight_decay 1e-4 \
     --batch_size 256 \
-    --num_workers 4 \
+    --num_workers 6 \
     --brightness 0.4 \
     --contrast 0.4 \
     --saturation 0.2 \
@@ -33,8 +33,8 @@ python ../../../main_pretrain.py \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
     --name sdbyol \
-    --project sem_neurips \
-    --entity il_group \
+    --project PROJECT \
+    --entity ENTITY \
     --wandb \
     --offline \
     --save_checkpoint \
@@ -46,6 +46,7 @@ python ../../../main_pretrain.py \
     --final_tau_momentum 1.0 \
     --momentum_classifier \
     --voc_size 13 \
-    --message_size $1 \
-    --tau_online 1 \
-    --tau_target 1
+    --message_size 5000 \
+    --tau_online 1.0 \
+    --tau_target 1.0 \
+    --auto_resume

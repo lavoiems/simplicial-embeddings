@@ -2,7 +2,7 @@
 
 module load python/3.8
 
-source ~/env/bin/activate
+source ~/class_env/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \

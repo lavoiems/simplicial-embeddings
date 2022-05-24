@@ -21,9 +21,10 @@ import os
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
 
+import numpy as np
 import torchvision
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
 
@@ -163,6 +164,25 @@ def prepare_transforms(dataset: str, pretrain_augs: bool) -> Tuple[nn.Module, nn
     return T_train, T_val
 
 
+def prepare_linear(
+    dataset: str,
+    batch_size: int,
+    validation: bool,
+):
+    if validation:
+        train_split = 'train[:90%]'
+        val_split = 'train[90%:]'
+    else:
+        test_splits = {
+            'food101': 'validation',
+        }
+        train_split = 'train'
+        val_split = test_splits.get(dataset, 'test')
+    tf_ds_train = tfds.load(dataset, batch_size=batch_size, split=train_split)
+    tf_ds_val = tfds.load(dataset, batch_size=batch_size, split=val_split)
+    return tf_ds_train, tf_ds_val
+
+
 def prepare_datasets(
     dataset: str,
     T_train: Callable,
@@ -171,6 +191,7 @@ def prepare_datasets(
     train_dir: Optional[Union[str, Path]] = None,
     val_dir: Optional[Union[str, Path]] = None,
     download: bool = True,
+    validation: bool = False,
 ) -> Tuple[Dataset, Dataset]:
     """Prepares train and val datasets.
 
@@ -215,7 +236,7 @@ def prepare_datasets(
 
         val_dataset = DatasetClass(
             data_dir / val_dir,
-            train=False,
+            train=True if validation else False,
             download=download,
             transform=T_val,
         )
@@ -229,7 +250,7 @@ def prepare_datasets(
         )
         val_dataset = STL10(
             data_dir / val_dir,
-            split="test",
+            split="train" if validation else "test",
             download=download,
             transform=T_val,
         )
@@ -245,7 +266,7 @@ def prepare_datasets(
 
 
 def prepare_dataloaders(
-    train_dataset: Dataset, val_dataset: Dataset, batch_size: int = 64, num_workers: int = 4
+    train_dataset: Dataset, val_dataset: Dataset, batch_size: int = 64, num_workers: int = 4, validation: bool = False,
 ) -> Tuple[DataLoader, DataLoader]:
     """Wraps a train and a validation dataset with a DataLoader.
 
@@ -257,14 +278,30 @@ def prepare_dataloaders(
     Returns:
         Tuple[DataLoader, DataLoader]: training dataloader and validation dataloader.
     """
+    if validation:
+        N = len(train_dataset)
+        idxs = list(range(N))
+        N_train = int(N * 0.9)
+        np.random.seed(1337)
+        np.random.shuffle(idxs)
+        train_idxs, valid_idxs = idxs[:N_train], idxs[N_train:]
+
+        train_sampler = SubsetRandomSampler(train_idxs)
+        valid_sampler = SubsetRandomSampler(valid_idxs)
+        shuffle = None
+    else:
+        train_sampler = None
+        valid_sampler = None
+        shuffle = True
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=True,
         drop_last=True,
+        sampler=train_sampler,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -272,6 +309,7 @@ def prepare_dataloaders(
         num_workers=num_workers,
         pin_memory=True,
         drop_last=False,
+        sampler=valid_sampler,
     )
     return train_loader, val_loader
 
@@ -285,6 +323,7 @@ def prepare_data(
     num_workers: int = 4,
     download: bool = True,
     pretrain_augs: bool = False,
+    validation: bool = False,
 ) -> Tuple[DataLoader, DataLoader]:
     """Prepares transformations, creates dataset objects and wraps them in dataloaders.
 
@@ -312,11 +351,13 @@ def prepare_data(
         train_dir=train_dir,
         val_dir=val_dir,
         download=download,
+        validation=validation,
     )
     train_loader, val_loader = prepare_dataloaders(
         train_dataset,
         val_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
+        validation=validation
     )
     return train_loader, val_loader

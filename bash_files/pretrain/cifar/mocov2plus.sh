@@ -1,7 +1,14 @@
-python3 ../../../main_pretrain.py \
-    --dataset $1 \
-    --backbone resnet18 \
+#!/bin/bash
+
+module load python/3.8
+
+source ~/env/bin/activate
+
+python ../../../main_pretrain.py \
+    --dataset cifar100 \
+    --backbone resnet50 \
     --data_dir ./datasets \
+    --checkpoint_dir $SCRATCH/save_dir \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
@@ -20,9 +27,9 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 0.0 0.0 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name mocov2plus-$1 \
-    --project solo-learn \
-    --entity unitn-mhug \
+    --name mocov2plus \
+    --project PROJECT \
+    --entity ENTITY \
     --wandb \
     --save_checkpoint \
     --method mocov2plus \

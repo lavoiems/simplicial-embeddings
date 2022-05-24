@@ -26,6 +26,7 @@ from solo.methods.largebyol import LBYOL
 from solo.methods.deepclusterv2 import DeepClusterV2
 from solo.methods.dino import DINO
 from solo.methods.linear_control import LinearModel
+from solo.methods.linear_masked import LinearModel as LinearMasked
 from solo.methods.linear import LinearModel as LinearBase
 from solo.methods.mocov2plus import MoCoV2Plus
 from solo.methods.nnbyol import NNBYOL
@@ -45,6 +46,7 @@ METHODS = {
     "base": BaseMethod,
     "linear": LinearModel,
     "linear_base": LinearBase,
+    "linear_masked": LinearMasked,
     # methods
     "barlow_twins": BarlowTwins,
     "byol": BYOL,

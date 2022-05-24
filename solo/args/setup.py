@@ -76,6 +76,7 @@ def parse_args_pretrain() -> argparse.Namespace:
     parser.add_argument("--save_checkpoint", action="store_true")
     parser.add_argument("--auto_umap", action="store_true")
     parser.add_argument("--auto_resume", action="store_true")
+    parser.add_argument("--validation", type=eval, default=False)
     temp_args, _ = parser.parse_known_args()
 
     # optionally add checkpointer and AutoUMAP args
@@ -113,6 +114,10 @@ def parse_args_linear() -> argparse.Namespace:
     parser.add_argument("--pretrained_feature_extractor", type=str)
     parser.add_argument("--pretrain_augs", type=eval, default=False)
     parser.add_argument("--linear_base", type=eval, default=False)
+    parser.add_argument("--mask", type=eval, default=False)
+    parser.add_argument("--validation", type=eval, default=False)
+    parser.add_argument("--ica", type=eval, default=False)
+    parser.add_argument("--ica_idx", type=int, default=0)
 
     # add shared arguments
     dataset_args(parser)
@@ -122,8 +127,14 @@ def parse_args_linear() -> argparse.Namespace:
     # add pytorch lightning trainer args
     parser = pl.Trainer.add_argparse_args(parser)
 
-    # linear model
-    parser = METHODS["linear"].add_model_specific_args(parser)
+    # add method-specific arguments
+    parser.add_argument("--method", type=str)
+
+    # THIS LINE IS KEY TO PULL THE MODEL NAME
+    temp_args, _ = parser.parse_known_args()
+
+    # add model specific args
+    parser = METHODS[temp_args.method].add_model_specific_args(parser)
 
     # THIS LINE IS KEY TO PULL WANDB AND SAVE_CHECKPOINT
     parser.add_argument("--save_checkpoint", action="store_true")

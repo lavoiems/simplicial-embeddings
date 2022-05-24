@@ -33,25 +33,15 @@ from solo.utils.metrics import accuracy_at_k, weighted_mean
 
 
 class SoftmaxBridge(nn.Module):
-    def __init__(self, message_size, voc_size, tau, tau_noise=0, **kwargs):
+    def __init__(self, message_size, voc_size, tau, **kwargs):
         super().__init__()
         self.message_size = message_size
         self.voc_size = voc_size
         self.tau = tau
-        self.tau_noise = tau_noise
 
     def forward(self, x):
         logits = x.view(-1, self.message_size, self.voc_size)
-
-        if self.tau_noise > 0:
-            tau_noise = torch.rand([logits.shape[0], logits.shape[1], 1],
-                                    dtype=logits.dtype,
-                                    device=logits.device)
-            # Recenter, scale
-            tau_noise = (tau_noise-0.5)*2*self.tau_noise
-            taus = tau_noise.exp()*self.tau
-        else:
-            taus = self.tau
+        taus = self.tau
 
         return F.softmax(logits / taus, -1).view(x.shape[0], -1)
 
@@ -361,3 +351,4 @@ class SDMoCoV2Plus(BaseMomentumMethod):
 
 
         self.log_dict(log, sync_dist=True)
+

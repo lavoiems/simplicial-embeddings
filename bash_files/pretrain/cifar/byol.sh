@@ -1,3 +1,10 @@
+#!/bin/bash
+
+module load python/3.8
+
+source ~/env/bin/activate
+
+
 python3 ../../../main_pretrain.py \
     --dataset $1 \
     --backbone resnet18 \
@@ -26,8 +33,8 @@ python3 ../../../main_pretrain.py \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
     --name byol-$1 \
-    --project solo-learn \
-    --entity unitn-mhug \
+    --project PROJECT \
+    --entity ENTITY \
     --wandb \
     --save_checkpoint \
     --method byol \
