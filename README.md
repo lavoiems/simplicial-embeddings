@@ -1,11 +1,11 @@
 # Simplicial Embeddings for Self-Supervised Learning and Downstream Classification
-This repository is the companion code for the article [Simplicial Embeddings for Self-supervised Learning and Downstream Classification](https://arxiv.org/abs/2204.00616). It is a fork of the Self-Supervised learning library `solo-learn` to which we apply the modification necessary to run the experiments in the paper.
+This repository is the companion code for the article Simplicial Embeddings for Self-supervised Learning and Downstream Classification. It is a fork of the Self-Supervised learning library `solo-learn` to which we apply the modification necessary to run the experiments in the paper.
 
 The purpose of this repository is reproducing the results from the paper. For the latest up to date SSL code, you should visit the official repos.
 
 
 ## Citation
-To cite our article, please cite:
+A new ArXiv version is comming soon. To cite the previous version of our article, please cite:
 ```
 @misc{https://doi.org/10.48550/arxiv.2204.00616,
   doi = {10.48550/ARXIV.2204.00616},  
