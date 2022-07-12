@@ -2,7 +2,7 @@
 
 module load python/3.8
 
-source /home/mila/l/lavoiems/class_env/bin/activate
+source /home/mila/l/lavoiems/env/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
@@ -32,11 +32,10 @@ python ../../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name sdbyol \
-    --project PROJECT \
-    --entity ENTITY \
+    --name sdbyol-z:4096 \
+    --project syn_ssl \
+    --entity lavoiems \
     --wandb \
-    --offline \
     --save_checkpoint \
     --method sdbyol \
     --proj_output_dim 256 \
@@ -45,8 +44,8 @@ python ../../../main_pretrain.py \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
     --momentum_classifier \
-    --voc_size 13 \
-    --message_size 5000 \
-    --tau_online 1.0 \
-    --tau_target 1.0 \
-    --auto_resume
+    --voc_size $2 \
+    --message_size $1 \
+    --tau_online $3 \
+    --tau_target $3 \
+

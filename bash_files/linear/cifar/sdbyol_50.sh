@@ -1,7 +1,7 @@
 #!/bin/bash
 
 module load python/3.8
-source ~/class_env/bin/activate
+source ~/env/bin/activate
 
 cp -r datasets $SLURM_TMPDIR
 
@@ -26,8 +26,8 @@ python ../../../main_linear.py \
     --num_workers 5 \
     --crop_size 32 \
     --name class_sdbyol \
-    --lrs 0.1 0.01 0.05 \
-    --wd1 0 1e-8 1e-6 1e-5 \
+    --lrs 0.01 \
+    --wd1 1e-5 \
     --wd2 0 \
     --class_base False \
     ${@:3}
