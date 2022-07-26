@@ -1,6 +1,12 @@
+#!/bin/bash
+
+module load python/3.8
+
+source ~/env_1.12/bin/activate
+
 python3 ../../../main_pretrain.py \
-    --dataset $1 \
-    --backbone resnet18 \
+    --dataset cifar100 \
+    --backbone resnet50 \
     --data_dir ./datasets \
     --max_epochs 1000 \
     --gpus 0 \
@@ -9,7 +15,7 @@ python3 ../../../main_pretrain.py \
     --optimizer sgd \
     --lars \
     --grad_clip_lars \
-    --eta_lars 0.02 \
+    --eta_lars 0.001 \
     --scheduler warmup_cosine \
     --lr 0.6 \
     --min_lr 0.0006 \
@@ -25,11 +31,11 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 0.0 0.0 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name swav-$1 \
+    --name swav-cifar100 \
     --wandb \
     --save_checkpoint \
-    --project solo-learn \
-    --entity unitn-mhug \
+    --project VIL \
+    --entity il_group \
     --method swav \
     --proj_hidden_dim 2048 \
     --queue_size 3840 \
