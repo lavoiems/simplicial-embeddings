@@ -1,28 +1,5 @@
 #!/bin/bash
 
-VIL_PASS=RSFTHfHoHYWUWx5m
-export ORION_DB_TYPE=mongodb
-export ORION_DB_NAME=vil
-if [[ $beluga == 0 ]] || [[ $graham == 0 ]] || [[ $narval == 0 ]]; then
-  if [ $beluga == 0 ]; then
-    remote_host=beluga$(((RANDOM%6)+1)).int.ets1.calculquebec.ca
-  elif [ $graham == 0 ];
-  then
-    remote_host=gra-login$(((RANDOM%3)+1))
-  elif [ $narval == 0 ]; then
-    remote_host=narval$(((RANDOM%3)+1))
-  else
-    echo "assertion unreachable"
-    exit -1
-  fi
-  echo "Access MongoDB with SSH tunnel"
-  export ORION_DB_ADDRESS="mongodb://lavoiems:$VIL_PASS@localhost/lavoiems?authSource=lavoiems&ssl_match_hostname=false"
-  export ORION_DB_PORT=$(python -c "from socket import socket; s = socket(); s.bind((\"\", 0)); print(s.getsockname()[1])")
-  ssh -o StrictHostKeyChecking=no $remote_host -L $ORION_DB_PORT:34.195.91.43:27017 -n -N -f
-else
-  echo "Access MongoDB"
-  export ORION_DB_ADDRESS="mongodb://lavoiems:$VIL_PASS@34.195.91.43/lavoiems?authSource=lavoiems"
-fi
 
 ROOT_PATH=$SCRATCH/sdbyol_search_IN
 
