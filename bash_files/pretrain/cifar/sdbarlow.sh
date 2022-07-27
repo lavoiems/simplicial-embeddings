@@ -56,4 +56,5 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --voc_size 13 \
   --message_size 5000 \
   --tau_online~'uniform(0.1,2.,precision=2)' \
-  --tau_target~'uniform(0.1,2.,precision=2)'
+  --tau_target~'uniform(0.1,2.,precision=2)' \
+  --taus 0.1 1. 2.
