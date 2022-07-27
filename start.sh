@@ -45,7 +45,7 @@ then
 	echo "In Mila - $mila"
 	#pip install --upgrade pip wheel setuptools
 	pip install -r ../../../requirements.txt
-  pip install torch==1.11.0+cu102 torchvision==0.12.0+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
+  pip install torch==1.12.0+cu102 torchvision==0.13.0+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
   pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda102
 	# pip install onnxruntime_training==1.11.0 -f https://download.onnxruntime.ai/onnxruntime_stable_cu102.html
 	# pip install torch_ort
