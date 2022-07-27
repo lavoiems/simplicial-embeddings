@@ -18,6 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 from solo.methods.barlow_twins import BarlowTwins
+from solo.methods.sdbt import SDBarlowTwins
 from solo.methods.base import BaseMethod
 from solo.methods.byol import BYOL
 from solo.methods.sdbyol import SDBYOL
@@ -34,6 +35,7 @@ from solo.methods.nnclr import NNCLR
 from solo.methods.nnsiam import NNSiam
 from solo.methods.ressl import ReSSL
 from solo.methods.simclr import SimCLR
+from solo.methods.sdsimclr import SDSimCLR
 from solo.methods.simsiam import SimSiam
 from solo.methods.supcon import SupCon
 from solo.methods.swav import SwAV
@@ -49,6 +51,7 @@ METHODS = {
     "linear_masked": LinearMasked,
     # methods
     "barlow_twins": BarlowTwins,
+    "sdbt": SDBarlowTwins,
     "byol": BYOL,
     "sdbyol": SDBYOL,
     "sdmoco": SDMoCoV2Plus,
@@ -61,6 +64,7 @@ METHODS = {
     "nnsiam": NNSiam,
     "ressl": ReSSL,
     "simclr": SimCLR,
+    "sdsimclr": SDSimCLR,
     "simsiam": SimSiam,
     "supcon": SupCon,
     "swav": SwAV,
