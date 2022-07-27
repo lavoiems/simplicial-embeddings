@@ -16,8 +16,9 @@ python3 ../../../main_pretrain.py \
     --lars \
     --grad_clip_lars \
     --eta_lars 0.001 \
+    --sk_epsilon 0.03 \
     --scheduler warmup_cosine \
-    --lr 0.6 \
+    --lr 0.1 \
     --min_lr 0.0006 \
     --classifier_lr 0.1 \
     --weight_decay 1e-6 \
@@ -43,3 +44,4 @@ python3 ../../../main_pretrain.py \
     --num_prototypes 3000 \
     --epoch_queue_starts 50 \
     --freeze_prototypes_epochs 2
+
