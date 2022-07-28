@@ -1,5 +1,5 @@
-torch==1.11
-torchvision
+torch==1.12
+torchvision==1.13
 einops
 pytorch-lightning==1.5.3
 torchmetrics==0.6.0
