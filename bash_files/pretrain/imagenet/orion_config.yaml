@@ -1,0 +1,20 @@
+experiment:
+    algorithms:
+        random:
+            seed: 421
+
+    strategy: StubParallelStrategy
+    max_broken: 200
+    working_dir: .
+
+evc:
+    enable: True
+    algorithm_change: False
+    cli_change_type: noeffect
+    code_change_type: noeffect
+    config_change_type: noeffect
+    orion_version_change: False
+    ignore_code_changes: True
+    manual_resolution: False
+    non_monitored_arguments: []
+

@@ -125,8 +125,8 @@ def main():
         wandb_logger = WandbLogger(
             name=args.name,
             #  id=args.name,
+            save_dir=str(args.checkpoint_dir),
             group=args.group,
-            save_dir=args.checkpoint_dir,
             project=args.project,
             entity=args.entity,
             offline=args.offline,
@@ -183,6 +183,19 @@ def main():
         callbacks=callbacks,
         enable_checkpointing=False,
     )
+
+    #a = iter(train_loader)
+    #data = next(a)
+
+    #model.eval()
+
+    #y = data[1][0][:1]
+
+    #from fvcore.nn import FlopCountAnalysis
+    #from decimal import Decimal
+    #flops = FlopCountAnalysis(model, y)
+    #print(f'{Decimal(flops.total()):.2E}')
+    #exit(0)
 
     try:
         if args.dali:
