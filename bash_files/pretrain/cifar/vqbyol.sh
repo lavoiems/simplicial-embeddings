@@ -83,7 +83,7 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --final_tau_momentum 1.0 \
   --momentum_classifier \
   --voc_size~'choices([128,256,512])' \
-  --message_size~'choices([512,1024,2048])' \
+  --message_size~'choices([128,256,512])' \
   --shared_codebook~'choices([True,False])' \
   --vq_code_wd~'choices([0.,1e-5])' \
   --vq_dimz~'choices([16,32])' \

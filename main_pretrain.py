@@ -181,7 +181,7 @@ def main():
 
     trainer = Trainer.from_argparse_args(
         args,
-        logger=wandb_logger if args.wandb else None,
+        logger=logger,
         callbacks=callbacks,
         enable_checkpointing=True,
     )
@@ -191,8 +191,9 @@ def main():
             trainer.fit(model, val_dataloaders=val_loader, ckpt_path=ckpt_path)
         else:
             trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
-    except RuntimeError:
+    except RuntimeError as e:
         orion_cli.report_bad_trial()
+        print(e)
     else:
         # Orion minimize the following objective
         obj = 100 - float(trainer.callback_metrics[args.model_selection_score])
