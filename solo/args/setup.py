@@ -66,6 +66,8 @@ def parse_args_pretrain() -> argparse.Namespace:
     # add method-specific arguments
     parser.add_argument("--method", type=str)
 
+    parser.add_argument("--model_selection_score", type=str, default='val/acc1')
+
     # THIS LINE IS KEY TO PULL THE MODEL NAME
     temp_args, _ = parser.parse_known_args()
 

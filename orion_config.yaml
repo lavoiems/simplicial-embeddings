@@ -1,7 +1,10 @@
 experiment:
     algorithms:
-        random:
+        asha:
             seed: 999
+            repetitions: 1
+            num_rungs: 5
+            num_brackets: 1
 
 
     max_broken: 4096

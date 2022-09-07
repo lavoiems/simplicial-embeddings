@@ -21,6 +21,7 @@ from solo.methods.barlow_twins import BarlowTwins
 from solo.methods.sdbt import SDBarlowTwins
 from solo.methods.base import BaseMethod
 from solo.methods.byol import BYOL
+from solo.methods.vqbyol import VQBYOL
 from solo.methods.sdbyol import SDBYOL
 from solo.methods.sdmocov2plus import SDMoCoV2Plus
 from solo.methods.largebyol import LBYOL
@@ -53,6 +54,7 @@ METHODS = {
     "barlow_twins": BarlowTwins,
     "sdbt": SDBarlowTwins,
     "byol": BYOL,
+    "vqbyol": VQBYOL,
     "sdbyol": SDBYOL,
     "sdmoco": SDMoCoV2Plus,
     "lbyol": LBYOL,
@@ -75,6 +77,7 @@ METHODS = {
 __all__ = [
     "BarlowTwins",
     "SDBYOL",
+    "VQBYOL",
     "BYOL",
     "BaseMethod",
     "DeepClusterV2",

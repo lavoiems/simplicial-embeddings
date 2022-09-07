@@ -1,19 +1,22 @@
 #!/bin/bash
 ROOT_PATH=$1
-METHOD=${2:-sdsimclr}
-DATASET=${3:-cifar100}
-BACKBONE=${4:-resnet50}
-OPTIM=${5:-sgd}
+SEED=${2:-0}
+METHOD=${3:-sdsimclr}
+DATASET=${4:-cifar100}
+BACKBONE=${5:-resnet50}
+OPTIM=${6:-sgd}
 GROUP="${METHOD}_${DATASET}_${BACKBONE}_${OPTIM}"
 OGROUP="benchmark_${GROUP}"
-EXPNAME="${OGROUP}_{trial.hash_params}"
+# EXPNAME="${OGROUP}_{trial.hash_params}"
+EXPNAME="${OGROUP}_${SEED}"
 DATA_PATH=${SLURM_TMPDIR}/data
 
-. ../../../start.sh pickleddb "${ROOT_PATH}/${OGROUP}"
+# . ../../../start.sh pickleddb "${ROOT_PATH}/${OGROUP}"
+. ../../../start.sh noorion "${ROOT_PATH}/${OGROUP}"
 
-orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
-  python3 ../../../main_pretrain.py \
-  --seed=0 \
+# orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
+python3 ../../../main_pretrain.py \
+  --seed $SEED \
   --wandb \
   --entity il_group \
   --project sem_neurips \
@@ -55,6 +58,6 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --proj_output_dim 256 \
   --voc_size 13 \
   --message_size 5000 \
-  --tau_online~'uniform(0.1,2.,precision=2)' \
-  --tau_target~'uniform(0.1,2.,precision=2)' \
+  --tau_online 0.17 \
+  --tau_target 0.78 \
   --taus 0.1 1. 2.

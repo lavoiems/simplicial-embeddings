@@ -93,12 +93,14 @@ class BaseMethod(pl.LightningModule):
         num_classes: int,
         backbone_args: dict,
         max_epochs: int,
+        total_max_epochs: int,
         batch_size: int,
         optimizer: str,
         lars: bool,
         lr: float,
         weight_decay: float,
         classifier_lr: float,
+        classifier_wd: float,
         exclude_bias_n_norm: bool,
         accumulate_grad_batches: Union[int, None],
         extra_optimizer_args: Dict,
@@ -178,12 +180,14 @@ class BaseMethod(pl.LightningModule):
         # training related
         self.num_classes = num_classes
         self.max_epochs = max_epochs
+        self.total_max_epochs = total_max_epochs or max_epochs
         self.batch_size = batch_size
         self.optimizer = optimizer
         self.lars = lars
         self.lr = lr
         self.weight_decay = weight_decay
         self.classifier_lr = classifier_lr
+        self.classifier_wd = classifier_wd
         self.exclude_bias_n_norm = exclude_bias_n_norm
         self.accumulate_grad_batches = accumulate_grad_batches
         self.extra_optimizer_args = extra_optimizer_args
@@ -272,14 +276,12 @@ class BaseMethod(pl.LightningModule):
         parser.add_argument("--batch_size", type=int, default=128)
         parser.add_argument("--lr", type=float, default=0.3)
         parser.add_argument("--classifier_lr", type=float, default=0.3)
+        parser.add_argument("--classifier_wd", type=float, default=0.)
         parser.add_argument("--weight_decay", type=float, default=0.0001)
         parser.add_argument("--num_workers", type=int, default=4)
 
         # wandb
         parser.add_argument("--name")
-        parser.add_argument("--project")
-        parser.add_argument("--group", default=None, type=str)
-        parser.add_argument("--entity", default=None, type=str)
         parser.add_argument("--wandb", action="store_true")
         parser.add_argument("--offline", action="store_true")
 
@@ -307,6 +309,7 @@ class BaseMethod(pl.LightningModule):
         parser.add_argument("--min_lr", default=0.0, type=float)
         parser.add_argument("--warmup_start_lr", default=0.00003, type=float)
         parser.add_argument("--warmup_epochs", default=10, type=int)
+        parser.add_argument("--total_max_epochs", default=None, type=int)
 
         # DALI only
         # uses sample indexes as labels and then gets the labels from a lookup table
@@ -334,7 +337,7 @@ class BaseMethod(pl.LightningModule):
                 "name": "classifier",
                 "params": self.classifier.parameters(),
                 "lr": self.classifier_lr,
-                "weight_decay": 0,
+                "weight_decay": self.classifier_wd,
             },
         ]
 
@@ -384,12 +387,12 @@ class BaseMethod(pl.LightningModule):
             scheduler = LinearWarmupCosineAnnealingLR(
                 optimizer,
                 warmup_epochs=self.warmup_epochs,
-                max_epochs=self.max_epochs,
+                max_epochs=self.total_max_epochs,
                 warmup_start_lr=self.warmup_start_lr,
                 eta_min=self.min_lr,
             )
         elif self.scheduler == "cosine":
-            scheduler = CosineAnnealingLR(optimizer, self.max_epochs, eta_min=self.min_lr)
+            scheduler = CosineAnnealingLR(optimizer, self.total_max_epochs, eta_min=self.min_lr)
         elif self.scheduler == "step":
             scheduler = MultiStepLR(optimizer, self.lr_decay_steps)
         else:
@@ -482,9 +485,9 @@ class BaseMethod(pl.LightningModule):
         outs["acc5"] = sum(outs["acc5"]) / self.num_large_crops
 
         metrics = {
-            "train_class_loss": outs["loss"],
-            "train_acc1": outs["acc1"],
-            "train_acc5": outs["acc5"],
+            "train/class_loss": outs["loss"],
+            "train/acc1": outs["acc1"],
+            "train/acc5": outs["acc5"],
         }
 
         self.log_dict(metrics, on_epoch=True, sync_dist=True)
@@ -524,9 +527,9 @@ class BaseMethod(pl.LightningModule):
 
         metrics = {
             "batch_size": batch_size,
-            "val_loss": out["loss"],
-            "val_acc1": out["acc1"],
-            "val_acc5": out["acc5"],
+            "val/loss": out["loss"],
+            "val/acc1": out["acc1"],
+            "val/acc5": out["acc5"],
         }
         return metrics
 
@@ -539,17 +542,12 @@ class BaseMethod(pl.LightningModule):
             outs (List[Dict[str, Any]]): list of outputs of the validation step.
         """
 
-        val_loss = weighted_mean(outs, "val_loss", "batch_size")
-        val_acc1 = weighted_mean(outs, "val_acc1", "batch_size")
-        val_acc5 = weighted_mean(outs, "val_acc5", "batch_size")
-
-        log = {"val_loss": val_loss, "val_acc1": val_acc1, "val_acc5": val_acc5}
-
+        metrics = {k: weighted_mean(outs, k, 'batch_size')
+                   for k in outs[0].keys() if k != 'batch_size'}
         if self.knn_eval and not self.trainer.sanity_checking:
             val_knn_acc1, val_knn_acc5 = self.knn.compute()
-            log.update({"val_knn_acc1": val_knn_acc1, "val_knn_acc5": val_knn_acc5})
-
-        self.log_dict(log, sync_dist=True)
+            metrics.update({"val/knn_acc1": val_knn_acc1, "val/knn_acc5": val_knn_acc5})
+        self.log_dict(metrics, sync_dist=True)
 
 
 class BaseMomentumMethod(BaseMethod):
@@ -624,7 +622,7 @@ class BaseMomentumMethod(BaseMethod):
                     "name": "momentum_classifier",
                     "params": self.momentum_classifier.parameters(),
                     "lr": self.classifier_lr,
-                    "weight_decay": 0,
+                    "weight_decay": self.classifier_wd,
                 }
             )
         return super().learnable_params + momentum_learnable_parameters
@@ -745,9 +743,9 @@ class BaseMomentumMethod(BaseMethod):
             )
 
             metrics = {
-                "train_momentum_class_loss": momentum_outs["momentum_loss"],
-                "train_momentum_acc1": momentum_outs["momentum_acc1"],
-                "train_momentum_acc5": momentum_outs["momentum_acc5"],
+                "train/momentum_class_loss": momentum_outs["momentum_loss"],
+                "train/momentum_acc1": momentum_outs["momentum_acc1"],
+                "train/momentum_acc5": momentum_outs["momentum_acc5"],
             }
             self.log_dict(metrics, on_epoch=True, sync_dist=True)
 
@@ -783,7 +781,7 @@ class BaseMomentumMethod(BaseMethod):
                 cur_step = cur_step * self.trainer.accumulate_grad_batches
             self.momentum_updater.update_tau(
                 cur_step=cur_step,
-                max_steps=len(self.trainer.train_dataloader) * self.trainer.max_epochs,
+                max_steps=len(self.trainer.train_dataloader) * self.total_max_epochs,
             )
         self.last_step = self.trainer.global_step
 
@@ -813,9 +811,9 @@ class BaseMomentumMethod(BaseMethod):
         if self.momentum_classifier is not None:
             metrics = {
                 "batch_size": batch_size,
-                "momentum_val_loss": out["loss"],
-                "momentum_val_acc1": out["acc1"],
-                "momentum_val_acc5": out["acc5"],
+                "val/momentum_loss": out["loss"],
+                "val/momentum_acc1": out["acc1"],
+                "val/momentum_acc5": out["acc5"],
             }
 
         return parent_metrics, metrics
@@ -834,14 +832,6 @@ class BaseMomentumMethod(BaseMethod):
 
         if self.momentum_classifier is not None:
             momentum_outs = [out[1] for out in outs]
-
-            val_loss = weighted_mean(momentum_outs, "momentum_val_loss", "batch_size")
-            val_acc1 = weighted_mean(momentum_outs, "momentum_val_acc1", "batch_size")
-            val_acc5 = weighted_mean(momentum_outs, "momentum_val_acc5", "batch_size")
-
-            log = {
-                "momentum_val_loss": val_loss,
-                "momentum_val_acc1": val_acc1,
-                "momentum_val_acc5": val_acc5,
-            }
-            self.log_dict(log, sync_dist=True)
+            metrics = {k: weighted_mean(momentum_outs, k, 'batch_size')
+                       for k in momentum_outs[0].keys() if k != 'batch_size'}
+            self.log_dict(metrics, sync_dist=True)

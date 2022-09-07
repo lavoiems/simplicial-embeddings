@@ -18,11 +18,12 @@
 # DEALINGS IN THE SOFTWARE.
 
 import os
+import json
 from pprint import pprint
 
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import (LearningRateMonitor, ModelCheckpoint)
+from pytorch_lightning.loggers import (WandbLogger, CSVLogger)
 from orion.client import cli as orion_cli
 
 from solo.args.setup import parse_args_pretrain
@@ -116,34 +117,54 @@ def main():
             num_workers=args.num_workers,
         )
 
+    # 1.7 will deprecate resume_from_checkpoint, but for the moment
+    # the argument is the same, but we need to pass it as ckpt_path to trainer.fit
+    ckpt_path = None
+    if args.auto_resume and args.resume_from_checkpoint is None:
+        last_ckpt_dir = os.path.join(args.checkpoint_dir, 'last.ckpt')
+        if os.path.exists(last_ckpt_dir):
+            ckpt_path = last_ckpt_dir
+    elif args.resume_from_checkpoint is not None:
+        ckpt_path = args.resume_from_checkpoint
+        del args.resume_from_checkpoint
+
     callbacks = []
 
-    # wandb logging
+    # Logging
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
     if args.wandb:
-        wandb_logger = WandbLogger(
+        job_type = 'pretrain'
+        logger = WandbLogger(
             name=args.name,
-            #  id=args.name,
-            group=args.group,
-            save_dir=args.checkpoint_dir,
-            project=args.project,
-            entity=args.entity,
+            save_dir=str(args.checkpoint_dir),
             offline=args.offline,
+            resume="allow",
+            id=args.name + '_' + job_type,
+            job_type=job_type
         )
-        wandb_logger.watch(model, log="gradients", log_freq=100)
-        wandb_logger.log_hyperparams(args)
+        logger.watch(model, log="gradients", log_freq=100)
+        logger.log_hyperparams(args)
 
         # lr logging
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
+    else:
+        logger = CSVLogger(save_dir=args.checkpoint_dir, name='pretrain')
+        logger.log_hyperparams(args)
 
     if args.save_checkpoint:
-        # save checkpoint on last epoch only
-        ckpt = Checkpointer(
-            args,
-            logdir=args.checkpoint_dir,
-            frequency=args.checkpoint_frequency,
+        json_path = os.path.join(args.checkpoint_dir, "args.json")
+        with open(json_path, 'w') as f:
+            json.dump(vars(args), f, default=lambda o: "<not serializable>")
+
+        ckpt = ModelCheckpoint(
+            dirpath=args.checkpoint_dir,
+            filename='ep={epoch}',
+            save_last=True, save_top_k=1,
+            monitor=args.model_selection_score, mode='max',
+            auto_insert_metric_name=False,
+            save_weights_only=False,
+            every_n_epochs=1, save_on_train_epoch_end=False
         )
         callbacks.append(ckpt)
 
@@ -158,30 +179,11 @@ def main():
         )
         callbacks.append(auto_umap)
 
-    # 1.7 will deprecate resume_from_checkpoint, but for the moment
-    # the argument is the same, but we need to pass it as ckpt_path to trainer.fit
-    ckpt_path = None
-    if args.auto_resume and args.resume_from_checkpoint is None:
-        auto_resumer = AutoResumer(
-            checkpoint_dir=args.checkpoint_dir,
-            max_hours=args.auto_resumer_max_hours,
-        )
-        resume_from_checkpoint = auto_resumer.find_checkpoint(args)
-        if resume_from_checkpoint is not None:
-            print(
-                "Resuming from previous checkpoint that matches specifications:",
-                f"'{resume_from_checkpoint}'",
-            )
-            ckpt_path = resume_from_checkpoint
-    elif args.resume_from_checkpoint is not None:
-        ckpt_path = args.resume_from_checkpoint
-        del args.resume_from_checkpoint
-
     trainer = Trainer.from_argparse_args(
         args,
         logger=wandb_logger if args.wandb else None,
         callbacks=callbacks,
-        enable_checkpointing=False,
+        enable_checkpointing=True,
     )
 
     try:
@@ -191,10 +193,9 @@ def main():
             trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
     except RuntimeError:
         orion_cli.report_bad_trial()
-        raise
     else:
         # Orion minimize the following objective
-        obj = 100 - float(trainer.callback_metrics["val_acc1"])
+        obj = 100 - float(trainer.callback_metrics[args.model_selection_score])
         orion_cli.report_objective(obj)
 
 
