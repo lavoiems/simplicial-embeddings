@@ -54,6 +54,7 @@ from solo.utils.pretrain_dataloader import (
     prepare_datasets,
     prepare_n_crop_transform,
     prepare_transform,
+    ImagenetDataModule,
 )
 
 
@@ -90,31 +91,34 @@ def main():
             print("Transforms:")
             pprint(transform)
 
-        train_dataset = prepare_datasets(
-            args.dataset,
-            transform,
-            data_dir=args.data_dir,
-            train_dir=args.train_dir,
-            no_labels=args.no_labels,
-        )
-        train_loader = prepare_dataloader(
-            train_dataset, batch_size=args.batch_size, num_workers=args.num_workers
-        )
+        if args.dataset != 'imagenet':
+            train_dataset = prepare_datasets(
+                args.dataset,
+                transform,
+                data_dir=args.data_dir,
+                train_dir=args.train_dir,
+                no_labels=args.no_labels,
+            )
+            train_loader = prepare_dataloader(
+                train_dataset, batch_size=args.batch_size, num_workers=args.num_workers
+            )
 
-    # normal dataloader for when it is available
-    if args.dataset == "custom" and (args.no_labels or args.val_dir is None):
-        val_loader = None
-    elif args.dataset in ["imagenet100", "imagenet"] and args.val_dir is None:
-        val_loader = None
-    else:
-        _, val_loader = prepare_data_classification(
-            args.dataset,
-            data_dir=args.data_dir,
-            train_dir=args.train_dir,
-            val_dir=args.val_dir,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-        )
+            # normal dataloader for when it is available
+            if args.dataset == "custom" and (args.no_labels or args.val_dir is None):
+                val_loader = None
+            elif args.dataset in ["imagenet100", "imagenet"] and args.val_dir is None:
+                val_loader = None
+            else:
+                _, val_loader = prepare_data_classification(
+                    args.dataset,
+                    data_dir=args.data_dir,
+                    train_dir=args.train_dir,
+                    val_dir=args.val_dir,
+                    batch_size=args.batch_size,
+                    num_workers=args.num_workers,
+                )
+        else:
+            dm = ImagenetDataModule(args.data_dir, args.train_dir, args.val_dir, args.batch_size, args.num_workers, transform)
 
     callbacks = []
 
@@ -192,8 +196,10 @@ def main():
     #y = data[1][0][:1]
 
     #from fvcore.nn import FlopCountAnalysis
+    ##from fvcore.nn import ActivationCountAnalysis
     #from decimal import Decimal
     #flops = FlopCountAnalysis(model, y)
+    ##flops = ActivationCountAnalysis(model, y)
     #print(f'{Decimal(flops.total()):.2E}')
     #exit(0)
 
@@ -201,7 +207,11 @@ def main():
         if args.dali:
             trainer.fit(model, val_dataloaders=val_loader, ckpt_path=ckpt_path)
         else:
-            trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
+            if args.dataset != 'imagenet':
+                trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
+            else:
+                trainer.fit(model, datamodule=dm, ckpt_path=ckpt_path)
+
     except RuntimeError:
         orion_cli.report_bad_trial()
         raise

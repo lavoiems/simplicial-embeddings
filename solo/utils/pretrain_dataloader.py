@@ -24,11 +24,16 @@ from typing import Any, Callable, List, Optional, Sequence, Type, Union
 
 import torch
 import torchvision
+from pytorch_lightning import LightningDataModule
 from PIL import Image, ImageFilter, ImageOps
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 from torchvision.datasets import STL10, ImageFolder
+
+from solo.utils.classification_dataloader import prepare_transforms as prepare_transforms_classification
+from solo.utils.classification_dataloader import prepare_datasets as prepare_datasets_classification
+from solo.utils.classification_dataloader import prepare_dataloaders as prepare_dataloaders_classification
 
 
 def dataset_with_index(DatasetClass: Type[Dataset]) -> Type[Dataset]:
@@ -558,3 +563,73 @@ def prepare_dataloader(
         drop_last=True,
     )
     return train_loader
+
+
+class ImagenetDataModule(LightningDataModule):
+    def __init__(self, data_dir, train_dir, val_dir, batch_size, num_workers, transform):
+        super().__init__()
+        self.data_dir = data_dir
+        self.train_dir = train_dir
+        self.val_dir = val_dir
+        self.num_workers = num_workers
+        self.batch_size = batch_size
+        self.pin_memory = True
+        self.shuffle = True
+        self.drop_last = True
+        self.transform = transform
+
+    @property
+    def num_classes(self):
+        return 1000
+
+    def _verify_splits(self, data_dir, split):
+        dirs = os.listdir(data_dir)
+
+        if split not in dirs:
+            raise FileNotFoundError(
+                f"a {split} Imagenet split was not found in {data_dir},"
+                f" make sure the folder contains a subfolder named {split}"
+            )
+
+    def prepare_data(self) -> None:
+        """This method already assumes you have imagenet2012 downloaded. It validates the data using the meta.bin.
+        .. warning:: Please download imagenet on your own first.
+        """
+        self._verify_splits(self.data_dir, "train")
+        self._verify_splits(self.data_dir, "val")
+
+    def setup(self, stage):
+        if stage == 'fit':
+            self.train_dataset = prepare_datasets('imagenet', self.transform, self.data_dir, self.train_dir)
+
+            T_train, T_val = prepare_transforms_classification('imagenet', False)
+            _, self.val_dataset = prepare_datasets_classification(
+                'imagenet',
+                T_train,
+                T_val,
+                data_dir=self.data_dir,
+                train_dir=self.train_dir,
+                val_dir=self.val_dir,
+                download=False,
+                validation=False,
+            )
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset,
+                          batch_size=self.batch_size,
+                          shuffle=self.shuffle,
+                          num_workers=self.num_workers,
+                          pin_memory=self.pin_memory,
+                          drop_last=self.drop_last,
+                          )
+
+    def val_dataloader(self):
+        _, val_loader = prepare_dataloaders_classification(
+            self.val_dataset,
+            self.val_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            validation=False
+        )
+        return val_loader
+
