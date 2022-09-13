@@ -19,17 +19,18 @@
 
 import os
 import json
+import math
 
 import torch
 import torch.nn as nn
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
-from torchvision.models import resnet18, resnet50
+from torchvision.models import resnet18, resnet50, wide_resnet50_2
 from solo.methods.linear_control import LinearModel
 
 from solo.args.setup import parse_args_linear
-from solo.methods.base import BaseMethod
+from solo.methods.base import BaseMethod, wide_resnet50_4
 from solo.utils.backbones import (
     swin_base,
     swin_large,
@@ -52,12 +53,48 @@ import types
 from solo.utils.checkpointer import Checkpointer
 from solo.utils.classification_dataloader import prepare_data
 
+
+class PartMM(nn.Module):
+    def __init__(self, input_size: int, output_size: int, n_parts: int, device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super(PartMM, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.n_parts = n_parts
+        self.weight = nn.Parameter(torch.empty((n_parts, input_size, output_size), **factory_kwargs))
+
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
+    def extra_repr(self) -> str:
+        return f'input_size={self.input_size}, output_size={self.output_size}, n_parts={self.n_parts}'
+
+    def forward(self, x): # x: B x F
+        # out = x.view(x.shape[0], -1, self.n_parts) # out: B x N x F/N | W: N x o/N x F/N
+        # out = out.transpose(0, 2).contiguous() # out: N x F/N x B | W: N x o/N x F/N
+        # out = torch.matmul(self.weight, out) # out: N x o/N x B
+        # out = out.transpose(0, 2).contiguous().view(-1, self.output_size*self.n_parts) # out: B x o
+
+        out = x.view(x.shape[0], self.n_parts, -1) # out: b x n x m/n
+        out = out.transpose(0, 1).contiguous() # out: n x b x m/n || W: n x m/n x o/n
+        out = torch.matmul(out, self.weight) # out: n x b x o/n
+        out = out.transpose(0, 1).contiguous() # out: b x n x o/n
+        out = out.view(x.shape[0], -1)
+
+        return out
+
+
 class Embedder(nn.Module):
-    def __init__(self, features_dim, message_size, voc_size, **kwargs):
+    def __init__(self, features_dim, message_size, voc_size, n_parts=None, **kwargs):
         super().__init__()
-        self.embedder = nn.Sequential(
-                            nn.Linear(features_dim, message_size*voc_size, bias=False),
-                            nn.BatchNorm1d(message_size*voc_size))
+        if not n_parts or n_parts == 1:
+            self.embedder = nn.Sequential(
+                                nn.Linear(features_dim, message_size*voc_size, bias=False),
+                                nn.BatchNorm1d(message_size*voc_size))
+        else:
+            self.embedder = nn.Sequential(
+                                PartMM(features_dim//n_parts, message_size*voc_size//n_parts, n_parts),
+                                nn.BatchNorm1d(message_size*voc_size))
+
         self.message_size = message_size
         self.voc_size = voc_size
 
@@ -81,6 +118,8 @@ def main():
         from solo.methods.linear import LinearModel
     elif args.mask:
         from solo.methods.linear_masked import LinearModel
+    elif args.method == 'linear_fine':
+        from solo.methods.linear_fine import LinearModelFine as LinearModel
     else:
         from solo.methods.linear_control import LinearModel
 
@@ -88,6 +127,8 @@ def main():
     backbone_model = {
         "resnet18": resnet18,
         "resnet50": resnet50,
+        "wide_resnet50_2": wide_resnet50_2,
+        "wide_resnet50_4": wide_resnet50_4,
         "vit_tiny": vit_tiny,
         "vit_small": vit_small,
         "vit_base": vit_base,
@@ -188,8 +229,8 @@ def main():
         wandb_logger = WandbLogger(
             name=args.name,
             project=args.project,
-            save_dir=args.checkpoint_dir if args.save_checkpoint else None,
-            group=args.group,
+            #save_dir=args.checkpoint_dir if args.save_checkpoint else None,
+            #group=args.group,
             entity=args.entity,
             offline=args.offline
         )
