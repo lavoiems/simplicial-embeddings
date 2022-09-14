@@ -2,10 +2,11 @@
 
 module load python/3.8
 
-source ~/env_1.12/bin/activate
+source env/bin/activate
 
-python3 ../../../main_pretrain.py \
+python ../../../main_pretrain.py \
     --dataset cifar100 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
     --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
@@ -29,13 +30,12 @@ python3 ../../../main_pretrain.py \
     --saturation 0.8 \
     --hue 0.2 \
     --gaussian_prob 0.0 0.0 \
-    --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name swav-$1 \
-    --wandb \
+    --name baselines-swav \
     --save_checkpoint \
-    --project VIL \
     --entity il_group \
+    --project iclr \
+    --wandb \
     --method swav \
     --proj_hidden_dim 2048 \
     --queue_size 3840 \

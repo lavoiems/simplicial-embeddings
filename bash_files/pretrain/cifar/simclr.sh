@@ -2,11 +2,14 @@
 
 module load python/3.8
 
-source ~/env_1.12/bin/activate
+source env/bin/activate
 
-python3 ../../../main_pretrain.py \
+echo "eta_lr 0.02"
+
+python ../../../main_pretrain.py \
     --dataset cifar100 \
-    --backbone resnet50 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
+    --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
     --gpus 0 \
@@ -15,7 +18,7 @@ python3 ../../../main_pretrain.py \
     --optimizer sgd \
     --lars \
     --grad_clip_lars \
-    --eta_lars 0.001 \
+    --eta_lars 0.02 \
     --exclude_bias_n_norm \
     --scheduler warmup_cosine \
     --lr 0.4 \
@@ -31,8 +34,8 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 0.0 0.0 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name simclr-cifar100 \
-    --project VIL \
+    --name baselines-simclr \
+    --project iclr \
     --entity il_group \
     --wandb \
     --save_checkpoint \

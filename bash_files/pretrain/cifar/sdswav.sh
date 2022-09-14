@@ -2,7 +2,7 @@
 
 module load python/3.8
 
-source env/bin/activate
+source ~/env_1.12/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
@@ -17,38 +17,33 @@ python ../../../main_pretrain.py \
     --lars \
     --grad_clip_lars \
     --eta_lars 0.02 \
-    --exclude_bias_n_norm \
     --scheduler warmup_cosine \
-    --lr 0.4 \
+    --lr 0.6 \
+    --min_lr 0.0006 \
     --classifier_lr 0.1 \
-    --weight_decay 1e-5 \
+    --weight_decay 1e-6 \
     --batch_size 256 \
-    --wandb \
-    --entity il_group \
-    --project sem_neurips \
-    --name $EXPNAME \
-    --group $OGROUP \
-    --method $METHOD \
-    --dataset ${DATASET} \
-    --backbone ${BACKBONE} \
-    --data_dir ${DATA_PATH}/${DATASET} \
-    --train_dir ${DATA_PATH}/${DATASET} \
-    --val_dir ${DATA_PATH}/${DATASET} \
-    --checkpoint_dir="${ROOT_PATH}/${OGROUP}/${EXPNAME}" \
-    --num_workers=${SLURM_CPUS_PER_TASK} \
-    --save_checkpoint \
-    --auto_resume \
+    --num_workers 4 \
+    --crop_size 32 \
     --brightness 0.8 \
     --contrast 0.8 \
     --saturation 0.8 \
     --hue 0.2 \
     --gaussian_prob 0.0 0.0 \
-    --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --temperature 0.2 \
+    --name sdswav \
+    --save_checkpoint \
+    --entity il_group \
+    --project iclr \
+    --wandb \
+    --method sdswav \
     --proj_hidden_dim 2048 \
-    --proj_output_dim 256 \
+    --queue_size 3840 \
+    --proj_output_dim 128 \
+    --num_prototypes 3000 \
+    --epoch_queue_starts 50 \
+    --freeze_prototypes_epochs 2 \
     --voc_size 13 \
     --message_size 5000 \
-    --tau_online 0.17 \
-    --tau_target 0.78
+    --tau_online 0.85 \
+    --tau_target 1.5

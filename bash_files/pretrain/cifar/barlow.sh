@@ -1,27 +1,27 @@
 #!/bin/bash
 
 module load python/3.8
+source env/bin/activate
 
-source ~/env_1.12/bin/activate
-
-python3 ../../../main_pretrain.py \
+python ../../../main_pretrain.py \
     --dataset cifar100 \
-    --backbone resnet50 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
+    --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
     --precision 16 \
-    --num_workers 4 \
     --optimizer sgd \
     --lars \
     --grad_clip_lars \
-    --eta_lars 0.001 \
+    --eta_lars 0.02 \
     --exclude_bias_n_norm \
     --scheduler warmup_cosine \
     --lr 0.3 \
     --weight_decay 1e-4 \
     --batch_size 256 \
+    --num_workers 4 \
     --brightness 0.4 \
     --contrast 0.4 \
     --saturation 0.2 \
@@ -30,8 +30,8 @@ python3 ../../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name barlow-cifar100 \
-    --project VIL \
+    --name baselines-barlow \
+    --project iclr \
     --entity il_group \
     --wandb \
     --save_checkpoint \

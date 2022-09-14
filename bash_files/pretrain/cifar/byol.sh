@@ -2,11 +2,11 @@
 
 module load python/3.8
 
-source ~/env/bin/activate
+source env/bin/activate
 
-
-python3 ../../../main_pretrain.py \
-    --dataset $1 \
+python ../../../main_pretrain.py \
+    --dataset cifar100 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
     --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
@@ -21,7 +21,6 @@ python3 ../../../main_pretrain.py \
     --scheduler warmup_cosine \
     --lr 1.0 \
     --classifier_lr 0.1 \
-    --weight_decay 1e-5 \
     --batch_size 256 \
     --num_workers 4 \
     --brightness 0.4 \
@@ -32,10 +31,11 @@ python3 ../../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name byol-$1 \
-    --project PROJECT \
-    --entity ENTITY \
+    --name baselines-byol \
+    --project iclr \
+    --entity il_group \
     --wandb \
+    --weight_decay 1e-5 \
     --save_checkpoint \
     --method byol \
     --proj_output_dim 256 \

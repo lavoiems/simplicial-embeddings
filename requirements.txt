@@ -4,6 +4,7 @@ einops
 pytorch-lightning==1.5.3
 torchmetrics==0.6.0
 lightning-bolts>=0.4.0
+protobuf==3.19
 tqdm
 wandb
 scipy

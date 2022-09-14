@@ -1,5 +1,12 @@
-python3 ../../../main_pretrain.py \
-    --dataset $1 \
+#!/bin/bash
+
+module load python/3.8
+
+source env/bin/activate
+
+python ../../../main_pretrain.py \
+    --dataset cifar100 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
     --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
@@ -26,9 +33,9 @@ python3 ../../../main_pretrain.py \
     --gaussian_prob 0.0 0.0 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name vicreg-$1 \
-    --project solo-learn \
-    --entity unitn-mhug \
+    --name baselines-vicreg \
+    --project iclr \
+    --entity il_group \
     --wandb \
     --save_checkpoint \
     --method vicreg \

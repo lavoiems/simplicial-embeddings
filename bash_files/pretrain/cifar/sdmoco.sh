@@ -2,13 +2,13 @@
 
 module load python/3.8
 
-source ~/env/bin/activate
+source env/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
-    --backbone resnet50 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
+    --backbone resnet18 \
     --data_dir ./datasets \
-    --checkpoint_dir $SCRATCH/sem_nips \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
@@ -28,8 +28,8 @@ python ../../../main_pretrain.py \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
     --name sdmoco \
-    --project PROJECT \
-    --entity ENTITY \
+    --project iclr \
+    --entity il_group \
     --wandb \
     --save_checkpoint \
     --method sdmoco \
@@ -41,5 +41,5 @@ python ../../../main_pretrain.py \
     --momentum_classifier \
     --voc_size 13 \
     --message_size 5000 \
-    --tau_online $1 \
-    --tau_target $1
+    --tau_online 0.04 \
+    --tau_target 0.01

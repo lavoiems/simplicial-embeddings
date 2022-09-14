@@ -1,10 +1,16 @@
-python3 ../../main_pretrain.py \
-    --dataset $1 \
+#!/bin/bash
+
+module load python/3.8
+
+source env/bin/activate
+
+python ../../../main_pretrain.py \
+    --dataset cifar100 \
+    --checkpoint_dir /network/scratch/l/lavoiems/baselines \
     --backbone resnet18 \
     --data_dir ./datasets \
     --max_epochs 1000 \
     --gpus 0 \
-    --accelerator gpu \
     --accelerator gpu \
     --precision 16 \
     --optimizer sgd \
@@ -26,9 +32,9 @@ python3 ../../main_pretrain.py \
     --solarization_prob 0.0 0.2 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
-    --name dino-$1 \
-    --entity unitn-mhug \
-    --project solo-learn \
+    --name baselines-dino \
+    --project iclr \
+    --entity il_group \
     --wandb \
     --save_checkpoint \
     --method dino \

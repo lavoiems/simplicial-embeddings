@@ -123,8 +123,10 @@ class SDSimCLR(BaseMethod):
               }
               for tau, linear_y in zip(self.taus, self.linears_y)
         ]
-
-        extra_learnable_params += [{"params": self.projector.parameters()}]
+        extra_learnable_params += [
+            {"params": self.projector.parameters()},
+            {"params": self.embedder.parameters()}
+        ]
         return super().learnable_params + extra_learnable_params
 
     def forward(self, X: torch.tensor, *args, **kwargs) -> Dict[str, Any]:
