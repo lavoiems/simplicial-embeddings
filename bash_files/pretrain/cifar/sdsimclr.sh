@@ -37,7 +37,7 @@ python ../../../main_pretrain.py \
     --entity il_group \
     --wandb \
     --save_checkpoint \
-    --method simclr \
+    --method sdsimclr \
     --temperature 0.2 \
     --proj_hidden_dim 2048 \
     --proj_output_dim 256 \
