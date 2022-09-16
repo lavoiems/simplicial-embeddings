@@ -25,7 +25,6 @@ from solo.methods.sdbyol import SDBYOL
 from solo.methods.partsdbyol import PartSDBYOL
 from solo.methods.gstbyol import GSTBYOL
 from solo.methods.REINFORCEbyol import REINFORCEBYOL
-from solo.methods.vqbyol import VQBYOL
 from solo.methods.sdmocov2plus import SDMoCoV2Plus
 from solo.methods.largebyol import LBYOL
 from solo.methods.deepclusterv2 import DeepClusterV2
@@ -66,7 +65,6 @@ METHODS = {
     "partsdbyol": PartSDBYOL,
     "gstbyol": GSTBYOL,
     "reinforcebyol": REINFORCEBYOL,
-    "vqbyol": VQBYOL,
     "sdmoco": SDMoCoV2Plus,
     "lbyol": LBYOL,
     "deepclusterv2": DeepClusterV2,
