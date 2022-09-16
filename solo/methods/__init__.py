@@ -22,11 +22,17 @@ from solo.methods.sdbt import SDBarlowTwins
 from solo.methods.base import BaseMethod
 from solo.methods.byol import BYOL
 from solo.methods.sdbyol import SDBYOL
+from solo.methods.partsdbyol import PartSDBYOL
+from solo.methods.gstbyol import GSTBYOL
+from solo.methods.REINFORCEbyol import REINFORCEBYOL
+from solo.methods.vqbyol import VQBYOL
 from solo.methods.sdmocov2plus import SDMoCoV2Plus
 from solo.methods.largebyol import LBYOL
 from solo.methods.deepclusterv2 import DeepClusterV2
 from solo.methods.dino import DINO
+from solo.methods.sddino import SDDINO
 from solo.methods.linear_control import LinearModel
+from solo.methods.linear_fine import LinearModelFine
 from solo.methods.linear_masked import LinearModel as LinearMasked
 from solo.methods.linear import LinearModel as LinearBase
 from solo.methods.mocov2plus import MoCoV2Plus
@@ -39,14 +45,17 @@ from solo.methods.sdsimclr import SDSimCLR
 from solo.methods.simsiam import SimSiam
 from solo.methods.supcon import SupCon
 from solo.methods.swav import SwAV
+from solo.methods.sdswav import SDSwAV
 from solo.methods.vibcreg import VIbCReg
 from solo.methods.vicreg import VICReg
+from solo.methods.sdvicreg import SDVICReg
 from solo.methods.wmse import WMSE
 
 METHODS = {
     # base classes
     "base": BaseMethod,
     "linear": LinearModel,
+    "linear_fine": LinearModelFine,
     "linear_base": LinearBase,
     "linear_masked": LinearMasked,
     # methods
@@ -54,10 +63,15 @@ METHODS = {
     "sdbt": SDBarlowTwins,
     "byol": BYOL,
     "sdbyol": SDBYOL,
+    "partsdbyol": PartSDBYOL,
+    "gstbyol": GSTBYOL,
+    "reinforcebyol": REINFORCEBYOL,
+    "vqbyol": VQBYOL,
     "sdmoco": SDMoCoV2Plus,
     "lbyol": LBYOL,
     "deepclusterv2": DeepClusterV2,
     "dino": DINO,
+    "sddino": SDDINO,
     "mocov2plus": MoCoV2Plus,
     "nnbyol": NNBYOL,
     "nnclr": NNCLR,
@@ -68,8 +82,10 @@ METHODS = {
     "simsiam": SimSiam,
     "supcon": SupCon,
     "swav": SwAV,
+    "sdswav": SDSwAV,
     "vibcreg": VIbCReg,
     "vicreg": VICReg,
+    "sdvicreg": SDVICReg,
     "wmse": WMSE,
 }
 __all__ = [
@@ -80,6 +96,7 @@ __all__ = [
     "DeepClusterV2",
     "DINO",
     "LinearModel",
+    "LinearModelFine",
     "MoCoV2Plus",
     "NNBYOL",
     "NNCLR",
