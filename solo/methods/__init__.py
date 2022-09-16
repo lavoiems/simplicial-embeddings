@@ -59,7 +59,7 @@ METHODS = {
     "linear_masked": LinearMasked,
     # methods
     "barlow_twins": BarlowTwins,
-    "sdbt": SDBarlowTwins,
+    "sdbarlow": SDBarlowTwins,
     "byol": BYOL,
     "sdbyol": SDBYOL,
     "partsdbyol": PartSDBYOL,
