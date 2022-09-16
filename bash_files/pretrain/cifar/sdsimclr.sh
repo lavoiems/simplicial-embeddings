@@ -23,21 +23,8 @@ python ../../../main_pretrain.py \
     --classifier_lr 0.1 \
     --weight_decay 1e-5 \
     --batch_size 256 \
-    --wandb \
-    --entity il_group \
-    --project sem_neurips \
-    --name $EXPNAME \
-    --group $OGROUP \
-    --method $METHOD \
-    --dataset ${DATASET} \
-    --backbone ${BACKBONE} \
-    --data_dir ${DATA_PATH}/${DATASET} \
-    --train_dir ${DATA_PATH}/${DATASET} \
-    --val_dir ${DATA_PATH}/${DATASET} \
-    --checkpoint_dir="${ROOT_PATH}/${OGROUP}/${EXPNAME}" \
-    --num_workers=${SLURM_CPUS_PER_TASK} \
-    --save_checkpoint \
-    --auto_resume \
+    --num_workers 4 \
+    --crop_size 32 \
     --brightness 0.8 \
     --contrast 0.8 \
     --saturation 0.8 \
@@ -45,6 +32,12 @@ python ../../../main_pretrain.py \
     --gaussian_prob 0.0 0.0 \
     --crop_size 32 \
     --num_crops_per_aug 1 1 \
+    --name sdsimclr \
+    --project iclr \
+    --entity il_group \
+    --wandb \
+    --save_checkpoint \
+    --method simclr \
     --temperature 0.2 \
     --proj_hidden_dim 2048 \
     --proj_output_dim 256 \
