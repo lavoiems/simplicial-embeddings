@@ -1,16 +1,16 @@
 #!/bin/bash
 
 module load python/3.8
-
 source env/bin/activate
 
 echo "eta_lr 0.02"
+cp -r datasets $SLURM_TMPDIR
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
     --checkpoint_dir /network/scratch/l/lavoiems/baselines \
     --backbone resnet18 \
-    --data_dir ./datasets \
+    --data_dir $SLURM_TMPDIR/datasets \
     --max_epochs 1000 \
     --gpus 0 \
     --accelerator gpu \
