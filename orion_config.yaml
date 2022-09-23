@@ -3,7 +3,7 @@ experiment:
         asha:
             seed: 999
             repetitions: 1
-            num_rungs: 5
+            num_rungs: 3
             num_brackets: 1
 
 

@@ -5,7 +5,7 @@ DATASET=${3:-cifar100}
 BACKBONE=${4:-resnet18}
 METHOD=${5:-vqbyol}
 GROUP="${METHOD}_${DATASET}_${BACKBONE}"
-OGROUP="search_${GROUP}"
+OGROUP="search2_${GROUP}"
 EXPNAME="${OGROUP}_{trial.hash_params}"
 # EXPNAME="${OGROUP}_${SEED}"
 DATA_PATH=${SLURM_TMPDIR}/data
@@ -53,7 +53,7 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --save_checkpoint \
   --auto_resume \
   --num_workers ${SLURM_CPUS_PER_TASK} \
-  --max_epochs~'fidelity(10,1000,base=4)' \
+  --max_epochs~'fidelity(100,1000,base=4)' \
   --total_max_epochs 1000 \
   --gpus 0 \
   --accelerator gpu \
@@ -64,7 +64,7 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --eta_lars 0.02 \
   --exclude_bias_n_norm \
   --scheduler warmup_cosine \
-  --lr 1.0 \
+  --lr~'uniform(0.1,1.1,precision=1)' \
   --classifier_lr 0.1 \
   --weight_decay 1e-5 \
   --batch_size 256 \
@@ -82,11 +82,11 @@ orion -v hunt -n ${OGROUP} --config=../../../orion_config.yaml \
   --base_tau_momentum 0.99 \
   --final_tau_momentum 1.0 \
   --momentum_classifier \
-  --voc_size~'choices([128,256,512])' \
-  --message_size~'choices([128,256,512])' \
+  --voc_size 128 \
+  --message_size 512 \
   --shared_codebook~'choices([True,False])' \
-  --vq_code_wd~'choices([0.,1e-5])' \
-  --vq_dimz~'choices([16,32])' \
-  --vq_rel_loss~'loguniform(0.001,10.,precision=2)' \
+  --vq_code_wd~'choices([0.,1e-6,1e-5,1e-4])' \
+  --vq_dimz 16 \
+  --vq_rel_loss~'loguniform(5e-4,5e-3,precision=1)' \
   --vq_update_rule=loss
 
