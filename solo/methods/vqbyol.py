@@ -39,6 +39,7 @@ class VectorQuantizer(nn.Module):
                  shared_codebook: bool=True,
                  vq_hard: bool=True,
                  vq_ladder: bool=False,
+                 vq_gumbel: bool=False,
                  vq_tau: float=1.0,
                  vq_dimz: float=8,
                  vq_beta: float=0.25, vq_eps: float = 1e-8,
@@ -52,6 +53,7 @@ class VectorQuantizer(nn.Module):
         assert(vq_tau >= 0.0)
         self.hard = vq_hard
         self.ladder = vq_ladder
+        self.gumbel = vq_gumbel
         self.tau = vq_tau
         assert(vq_dimz is not None)
         self.dimz = vq_dimz
@@ -115,18 +117,22 @@ class VectorQuantizer(nn.Module):
 
     def encode(self, latent):
         scores = self.score(latent)  # (B, ..., code.optionsn)
-        if self.hard:
-            return scores.argmax(-1)  # (B, ...)
+        if self.gumbel or self.ladder:
+            return F.gumbel_softmax(scores, dim=-1)
         return F.softmax(scores, dim=-1)
 
-    def decode(self, latent, code):
+    def decode(self, latent, y):
+        if self.hard:
+            code = y.argmax(-1)  # (B, ...)
+        else:
+            code = y
         if self.shared_codebook:
-            if self.hard or self.ladder:
+            if self.hard:
                 values = self.codebook[code]  # (B, ..., dimz)
             else:
                 values = torch.einsum('blv,vz->blz', code, self.codebook)
         else:
-            if self.hard or self.ladder:
+            if self.hard:
                 values = self.codebook[torch.arange(self.code_length)[None, :], code]  # (B, ..., dimz)
             else:
                 values = torch.einsum('blv,lvz->blz', code, self.codebook)
@@ -138,11 +144,7 @@ class VectorQuantizer(nn.Module):
     def forward(self, query):
         latent = self.latent(query)  # (B, ..., dimz)
         y = self.encode(latent)
-        if self.ladder:
-            code = Categorical(probs=y).sample() if self.training else y.argmax(-1)
-        else:
-            code = y
-        quantized = self.decode(latent, code)  # (B, ..., dimz)
+        quantized = self.decode(latent, y)  # (B, ..., dimz)
 
         ema_update = self.update_rule == 'ema'
         if self.hard:
@@ -165,16 +167,13 @@ class VectorQuantizer(nn.Module):
                     logNs = 0.5 * quantized[:, :, None, :].sub(self.codebook).pow(2).sum(-1)
                 loss = (self.beta / self.tau) * torch.einsum('blv,blv->bl', y, logNs).mean()
 
-        if self.hard:
-            representation = F.one_hot(y, num_classes=self.code_options).to(dtype=query.dtype)
-        else:
-            representation = y
-            y = representation.argmax(-1)
-        py = representation.mean(dim=tuple(range(representation.dim()-1)))
+        py = y.mean(dim=tuple(range(y.dim()-1)))
         Hy = - torch.sum(py * torch.log2(py + 1e-6))
-        Hyx = - torch.mean(representation.mul(torch.log2(representation + 1e-6)).sum(-1))
-        return {'logits': latent, 'embedding': embedding.flatten(1), 'msg': y,
-                'representation': representation.flatten(1),
+        Hyx = - torch.mean(y.mul(torch.log2(y + 1e-6)).sum(-1))
+        if self.hard:
+            y = F.one_hot(y.argmax(-1), num_classes=self.code_options).to(dtype=query.dtype)
+        return {'logits': latent, 'embedding': embedding.flatten(1), 'msg': y.argmax(-1),
+                'representation': y.flatten(1),
                 'metrics': {'Hy': Hy, 'Hyx': Hyx},
                 'loss': loss}
 
@@ -187,9 +186,11 @@ class VQBYOL(BaseMomentumMethod):
         pred_hidden_dim: int,
         message_size: int,
         voc_size: int,
+        classifier_lasso: float,
         shared_codebook: bool=True,
         vq_hard: bool=True,
         vq_ladder: bool=False,
+        vq_gumbel: bool=False,
         vq_spherical: bool=False,
         vq_tau: float=1.0,
         vq_dimz: float=8,
@@ -208,6 +209,7 @@ class VQBYOL(BaseMomentumMethod):
             pred_hidden_dim (int): number of neurons of the hidden layers of the predictor.
         """
         super().__init__(**kwargs)
+        self.classifier_lasso = classifier_lasso
 
         self.message_size = message_size
         self.voc_size = voc_size
@@ -221,7 +223,7 @@ class VQBYOL(BaseMomentumMethod):
         )
         self.vq = VectorQuantizer(message_size, voc_size,
             shared_codebook=shared_codebook,
-            vq_tau=vq_tau, vq_hard=vq_hard, vq_ladder=vq_ladder,
+            vq_tau=vq_tau, vq_hard=vq_hard, vq_ladder=vq_ladder, vq_gumbel=vq_gumbel,
             vq_dimz=vq_dimz, vq_beta=vq_beta,
             vq_eps=vq_eps, vq_update_rule=vq_update_rule,
             vq_ema=vq_ema, vq_spherical=vq_spherical)
@@ -256,6 +258,8 @@ class VQBYOL(BaseMomentumMethod):
         parent_parser = super(VQBYOL, VQBYOL).add_model_specific_args(parent_parser)
         parser = parent_parser.add_argument_group("byol")
 
+        parser.add_argument("--classifier_lasso", type=float, default=0.)
+
         # projector
         parser.add_argument("--proj_output_dim", type=int, default=256)
         parser.add_argument("--proj_hidden_dim", type=int, default=2048)
@@ -271,6 +275,8 @@ class VQBYOL(BaseMomentumMethod):
         parser.add_argument("--vq_hard", type=eval,
             choices=[True, False], default=True)
         parser.add_argument("--vq_ladder", type=eval,
+            choices=[True, False], default=False)
+        parser.add_argument("--vq_gumbel", type=eval,
             choices=[True, False], default=False)
         parser.add_argument("--vq_spherical", type=eval,
             choices=[True, False], default=False)
@@ -298,7 +304,7 @@ class VQBYOL(BaseMomentumMethod):
             {"name": f'classifier_y',
              "params": self.classifier_y.parameters(),
              "lr": self.classifier_lr,
-             "weight_decay": self.classifier_wd,
+             "weight_decay": 0.,
             },
             {"name": f'classifier_vq',
              "params": self.classifier_vq.parameters(),
@@ -369,8 +375,9 @@ class VQBYOL(BaseMomentumMethod):
     def _class_step(self, X, targets, classifier):
         logits = classifier(X.detach())
         loss = F.cross_entropy(logits, targets, ignore_index=-1)
+        l1_loss = sum(v.absolute().sum() for v in classifier.parameters())
         acc1, acc5 = accuracy_at_k(logits, targets, top_k=(1, 5))
-        return {"loss": loss, "acc1": acc1, "acc5": acc5}
+        return {"loss": loss, "l1_loss": l1_loss, "acc1": acc1, "acc5": acc5}
 
     def _shared_step(
         self, feats: List[torch.Tensor], momentum_feats: List[torch.Tensor], targets: List[torch.tensor]
@@ -416,6 +423,7 @@ class VQBYOL(BaseMomentumMethod):
         metrics.update(vq_class_outs)
 
         online_class_loss = y_class_outs['online_y_loss'] + vq_class_outs['online_vq_loss']
+        online_class_loss = online_class_loss + self.classifier_lasso * y_class_outs['online_y_l1_loss']
 
         return neg_cos_sim, vq_loss, online_class_loss, metrics
 

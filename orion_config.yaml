@@ -8,7 +8,6 @@ experiment:
         random:
           seed: 999
 
-
     max_broken: 4096
     max_trials: 4096
     working_dir: /tmp/solo-orion_asdfasfasgafasdfa

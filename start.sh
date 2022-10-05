@@ -11,7 +11,7 @@ echo $(date)
 [[ $SLURM_CLUSTER_NAME == mila ]]; mila=$?;
 
 if [ $narval == 0 ]; then
-module load StdEnv/2020
+module load StdEnv/2020 intel/2020.1.217
 fi
 
 module load python/3.8
@@ -22,8 +22,8 @@ module load gcc/8.4.0 cuda/11.2/cudnn
 module load cuda/11.2/nccl
 module load cudatoolkit/11.2
 else
-module load cuda/11.1
-module load cudnn 2> /dev/null || module load cuda/11.1/cudnn
+module load cuda/11.4
+module load cudnn 2> /dev/null || module load cuda/11.4/cudnn
 fi
 
 nvidia-smi
