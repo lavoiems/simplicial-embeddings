@@ -19,154 +19,63 @@
 
 import os
 import json
+import types
 
 import torch
 import torch.nn as nn
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.loggers import WandbLogger, CSVLogger
-from torchvision.models import resnet18, resnet50
-from solo.methods.linear_control import LinearModel
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.callbacks import (LearningRateMonitor, ModelCheckpoint)
+from pytorch_lightning.loggers import (WandbLogger, CSVLogger)
+from orion.client import cli as orion_cli
 
 from solo.args.setup import parse_args_linear
-from solo.methods.base import BaseMethod
-from solo.utils.backbones import (
-    swin_base,
-    swin_large,
-    swin_small,
-    swin_tiny,
-    vit_base,
-    vit_large,
-    vit_small,
-    vit_tiny,
-)
+from solo.methods import METHODS
+from solo.utils.classification_dataloader import prepare_data
 
 try:
-    from solo.methods.dali import ClassificationABC
+    from solo.methods.dali import ClassificationABC, PretrainABC
 except ImportError:
     _dali_avaliable = False
 else:
     _dali_avaliable = True
-import types
 
-from solo.utils.checkpointer import Checkpointer
-from solo.utils.classification_dataloader import prepare_data
-
-class Embedder(nn.Module):
-    def __init__(self, features_dim, message_size, voc_size, **kwargs):
-        super().__init__()
-        self.embedder = nn.Sequential(
-                            nn.Linear(features_dim, message_size*voc_size, bias=False),
-                            nn.BatchNorm1d(message_size*voc_size))
-        self.message_size = message_size
-        self.voc_size = voc_size
-
-    def forward(self, x):
-        o = self.embedder(x)
-        return o.view(x.shape[0], self.message_size, self.voc_size)
-
-
-class ICA(nn.Module):
-    def __init__(self, feats_size: int, idx: int):
-        super().__init__()
-        self.feats_ica = nn.ModuleList([nn.Linear(feats_size, feats_size, bias=False) for _ in range(5)])
-        self.idx = idx
-
-    def forward(self, X: torch.Tensor):
-        return self.feats_ica[self.idx](X)
 
 def main():
     args = parse_args_linear()
-    if args.linear_base:
-        from solo.methods.linear import LinearModel
-    elif args.mask:
-        from solo.methods.linear_masked import LinearModel
-    else:
-        from solo.methods.linear_control import LinearModel
+    seed_everything(args.seed)
 
-    assert args.backbone in BaseMethod._SUPPORTED_BACKBONES
-    backbone_model = {
-        "resnet18": resnet18,
-        "resnet50": resnet50,
-        "vit_tiny": vit_tiny,
-        "vit_small": vit_small,
-        "vit_base": vit_base,
-        "vit_large": vit_large,
-        "swin_tiny": swin_tiny,
-        "swin_small": swin_small,
-        "swin_base": swin_base,
-        "swin_large": swin_large,
-    }[args.backbone]
+    assert args.method in METHODS, f"Choose from {METHODS.keys()}"
+    assert args.linear_method in METHODS, f"Choose from {METHODS.keys()}"
 
-    # initialize backbone
-    kwargs = args.backbone_args
-    cifar = kwargs.pop("cifar", False)
-    # swin specific
-    if "swin" in args.backbone and cifar:
-        kwargs["window_size"] = 4
+    MethodClass = METHODS[args.method]
+    LinearModel = METHODS[args.linear_method]
+    if args.dali:
+        assert (
+            _dali_avaliable
+        ), "Dali is not currently avaiable, please install it first with [dali]."
+        MethodClass = types.new_class(f"Dali{MethodClass.__name__}", (PretrainABC, MethodClass))
+        LinearModel = types.new_class(f"Dali{LinearModel.__name__}", (ClassificationABC, LinearModel))
 
-    args_path = os.path.join('/'.join(args.pretrained_feature_extractor.split('/')[:-1]), 'args.json')
+    args_path = str(args.pretrained_feature_extractor.parent / 'args.json')
     pretrain_args = json.load(open(args_path, 'r'))
 
-    backbone = backbone_model(**kwargs)
-    in_features = backbone.fc.in_features
-    if "resnet" in args.backbone:
-        # remove fc layer
-        backbone.fc = nn.Identity()
-        if cifar:
-            backbone.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
-            backbone.maxpool = nn.Identity()
+    model = MethodClass(**pretrain_args)
 
     assert (
-        args.pretrained_feature_extractor.endswith(".ckpt")
-        or args.pretrained_feature_extractor.endswith(".pth")
-        or args.pretrained_feature_extractor.endswith(".pt")
+        args.pretrained_feature_extractor.match("*.ckpt")
+        or args.pretrained_feature_extractor.match("*.pth")
+        or args.pretrained_feature_extractor.match("*.pt")
     )
-    ckpt_path = args.pretrained_feature_extractor
+    ckpt_path = str(args.pretrained_feature_extractor)
 
     state = torch.load(ckpt_path)["state_dict"]
     for k in list(state.keys()):
-        if "encoder" in k:
-            raise Exception(
-                "You are using an older checkpoint."
-                "Either use a new one, or convert it by replacing"
-                "all 'encoder' occurances in state_dict with 'backbone'"
-            )
-        if "backbone" in k:
-            state[k.replace("backbone.", "")] = state[k]
-        if 'embedder' not in k and 'feats_ica' not in k:
+        if "classifier" in k:
             del state[k]
-    backbone.load_state_dict(state, strict=False)
-    backbone.cuda()
-
-    if not args.linear_base:
-        if pretrain_args['method'] == 'byol':
-            if args.ica:
-                embedder = ICA(in_features, args.ica_idx)
-                embedder.load_state_dict(state, strict=False)
-            else:
-                embedder = nn.Identity()
-            pretrain_args['voc_size'] = 1
-            pretrain_args['message_size'] = in_features
-        else:
-            embedder = Embedder(in_features, **pretrain_args)
-            embedder.load_state_dict(state, strict=False)
-        embedder.cuda()
-
+    model.load_state_dict(state, strict=False)
     print(f"loaded {ckpt_path}")
 
-    if args.dali:
-        assert _dali_avaliable, "Dali is not currently avaiable, please install it first."
-        Class = types.new_class(f"Dali{LinearModel.__name__}", (ClassificationABC, LinearModel))
-    else:
-        Class = LinearModel
-
-    del args.backbone
-
-    if not args.linear_base:
-        model = Class(backbone, embedder, voc_size=pretrain_args['voc_size'], message_size=pretrain_args['message_size'], **args.__dict__)
-    else:
-        model = Class(backbone, **args.__dict__)
+    linear_model = LinearModel(model, **vars(args))
 
     train_loader, val_loader = prepare_data(
         args.dataset,
@@ -182,58 +91,73 @@ def main():
     callbacks = []
 
     # wandb logging
-    #os.makedirs(args.checkpoint_dir, exist_ok=True)
-    #os.makedirs(os.path.join(args.checkpoint_dir, 'wandb'), exist_ok=True)
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    checkpoint_dir = str(args.checkpoint_dir)
     if args.wandb:
-        wandb_logger = WandbLogger(
+        job_type = 'train_linear'
+        logger = WandbLogger(
             name=args.name,
-            project=args.project,
-            save_dir=args.checkpoint_dir if args.save_checkpoint else None,
-            group=args.group,
-            entity=args.entity,
-            offline=args.offline
+            save_dir=checkpoint_dir,
+            offline=args.offline,
+            resume="allow",
+            id=args.name + '_' + args.checkpoint_dir.name,
+            job_type=job_type
         )
-        wandb_logger.watch(model, log="gradients", log_freq=100)
-        wandb_logger.log_hyperparams(args)
+        logger.watch(linear_model, log="gradients", log_freq=100)
+        logger.log_hyperparams(args)
 
         # lr logging
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
         callbacks.append(lr_monitor)
+    else:
+        logger = CSVLogger(save_dir=checkpoint_dir, name='classifier')
+        logger.log_hyperparams(args)
 
     if args.save_checkpoint:
-        # save checkpoint on last epoch only
-        ckpt = Checkpointer(
-            args,
-            logdir=os.path.join(args.checkpoint_dir, "linear"),
-            frequency=args.checkpoint_frequency,
+        json_path = os.path.join(checkpoint_dir, "args.json")
+        with open(json_path, 'w') as f:
+            json.dump(vars(args), f, default=lambda o: "<not serializable>")
+
+        ckpt = ModelCheckpoint(
+            dirpath=checkpoint_dir,
+            filename='ep={epoch}',
+            save_last=True, save_top_k=1,
+            monitor=args.model_selection_score, mode='max',
+            auto_insert_metric_name=False,
+            save_weights_only=False,
+            every_n_epochs=1, save_on_train_epoch_end=False
         )
         callbacks.append(ckpt)
 
-    run_dir = os.path.dirname(ckpt_path)
-    csv_logger = CSVLogger(
-        save_dir=run_dir, name=f'classifier'
-    )
-    csv_logger.log_hyperparams(args)
-
-    # 1.7 will deprecate resume_from_checkpoint, but for the moment
-    # the argument is the same, but we need to pass it as ckpt_path to trainer.fit
-    if args.resume_from_checkpoint is not None:
+    ckpt_path = None
+    if args.auto_resume and args.resume_from_checkpoint is None:
+        last_ckpt_dir = os.path.join(checkpoint_dir, 'last.ckpt')
+        if os.path.exists(last_ckpt_dir):
+            ckpt_path = last_ckpt_dir
+    elif args.resume_from_checkpoint is not None:
         ckpt_path = args.resume_from_checkpoint
         del args.resume_from_checkpoint
-    else:
-        ckpt_path = None
 
     trainer = Trainer.from_argparse_args(
         args,
-        logger=wandb_logger if args.wandb else csv_logger,
+        logger=logger,
         callbacks=callbacks,
         plugins=DDPPlugin(find_unused_parameters=True) if args.accelerator == 'ddp' else None,
-        enable_checkpointing=False,
+        enable_checkpointing=True,
     )
-    if args.dali:
-        trainer.fit(model, val_dataloaders=val_loader, ckpt_path=ckpt_path)
+
+    try:
+        if args.dali:
+            trainer.fit(linear_model, val_dataloaders=val_loader, ckpt_path=ckpt_path)
+        else:
+            trainer.fit(linear_model, train_loader, val_loader, ckpt_path=ckpt_path)
+    except RuntimeError as e:
+        orion_cli.report_bad_trial()
+        print(e)
     else:
-        trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
+        # Orion minimize the following objective
+        obj = 100 - float(trainer.callback_metrics[args.model_selection_score])
+        orion_cli.report_objective(obj)
 
 
 if __name__ == "__main__":

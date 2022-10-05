@@ -37,17 +37,27 @@ class VectorQuantizer(nn.Module):
     def __init__(self,
                  code_length: int, code_options: int,
                  shared_codebook: bool=True,
+                 vq_hard: bool=True,
+                 vq_ladder: bool=False,
+                 vq_tau: float=1.0,
                  vq_dimz: float=8,
                  vq_beta: float=0.25, vq_eps: float = 1e-8,
                  vq_update_rule: Text = 'loss',
+                 vq_spherical: bool=False,
                  vq_ema: float = 0.95):
         super().__init__()
         self.code_length = code_length
         self.code_options = code_options
+        assert(not vq_hard or (vq_hard and not vq_ladder))
+        assert(vq_tau >= 0.0)
+        self.hard = vq_hard
+        self.ladder = vq_ladder
+        self.tau = vq_tau
         assert(vq_dimz is not None)
         self.dimz = vq_dimz
         self.beta = vq_beta
         self.eps = vq_eps
+        self.spherical = vq_spherical
 
         self.update_rule = vq_update_rule
         self.ema = vq_ema
@@ -66,6 +76,9 @@ class VectorQuantizer(nn.Module):
     def init(self, code_dims):
         torch.nn.init.normal_(self.codebook,
                               mean=0.0, std=np.sqrt(2./(code_dims * self.dimz)))
+        if self.spherical:
+            with torch.no_grad():
+                self.codebook.copy_(F.normalize(self.codebook, p=2, dim=-1))
         # torch.nn.init.uniform_(self.codebook, a=-1.0 / self.code_options, b=1.0 / self.code_options)
 
     def extra_repr(self):
@@ -76,7 +89,10 @@ class VectorQuantizer(nn.Module):
 
     def score(self, latent):
         latent = latent[..., None, :]  # (B, code.length, code.options, dimz)
-        scores = - 0.5 * latent.sub(self.codebook).pow(2).sum(-1)
+        if self.spherical:
+            scores = F.cosine_similarity(latent, self.codebook, dim=-1) / self.tau
+        else:
+            scores = - 0.5 * latent.sub(self.codebook).pow(2).sum(-1) / self.tau
         return scores  # (B, code.length, code.options)
 
     @torch.no_grad()
@@ -93,41 +109,73 @@ class VectorQuantizer(nn.Module):
         p_y = idx.sum(dim=batch_dims) / idx.sum()
         diff_codebook = new_codebook.sub(self.codebook)
         self.codebook.add_(diff_codebook.mul(1. - ema))
+        if self.spherical:
+            self.codebook.copy_(F.normalize(self.codebook, p=2, dim=-1))
         return diff_codebook.pow(2).sum(-1).max(), p_y
 
     def encode(self, latent):
         scores = self.score(latent)  # (B, ..., code.optionsn)
-        return scores.argmax(-1)  # (B, ...)
+        if self.hard:
+            return scores.argmax(-1)  # (B, ...)
+        return F.softmax(scores, dim=-1)
 
     def decode(self, latent, code):
         if self.shared_codebook:
-            values = self.codebook[code]  # (B, ..., dimz)
+            if self.hard or self.ladder:
+                values = self.codebook[code]  # (B, ..., dimz)
+            else:
+                values = torch.einsum('blv,vz->blz', code, self.codebook)
         else:
-            values = self.codebook[torch.arange(self.code_length)[None, :], code]  # (B, ..., dimz)
+            if self.hard or self.ladder:
+                values = self.codebook[torch.arange(self.code_length)[None, :], code]  # (B, ..., dimz)
+            else:
+                values = torch.einsum('blv,lvz->blz', code, self.codebook)
+        if self.ladder:
+            beta = self.beta**0.5
+            values = (1 - beta) * values + beta * latent + torch.randn_like(values) * self.tau**0.5
         return values
 
     def forward(self, query):
         latent = self.latent(query)  # (B, ..., dimz)
         y = self.encode(latent)
-        quantized = self.decode(latent, y)  # (B, ..., dimz)
+        if self.ladder:
+            code = Categorical(probs=y).sample() if self.training else y.argmax(-1)
+        else:
+            code = y
+        quantized = self.decode(latent, code)  # (B, ..., dimz)
 
         ema_update = self.update_rule == 'ema'
-        embedding = (latent - latent.detach()) + (quantized.detach() if ema_update else quantized)
+        if self.hard:
+            embedding = (latent - latent.detach()) + (quantized.detach() if ema_update else quantized)
+        else:
+            embedding = quantized
 
         loss = 0.
         if self.training:
-            loss = self.beta * quantized.detach().sub(latent).pow(2).sum(-1).mean()
-            if self.update_rule == 'loss':
-                loss = loss + quantized.sub(latent.detach()).pow(2).sum(-1).mean()
-            elif ema_update:
-                self.ema_codebook_update(latent, y)
+            if self.hard:
+                loss = self.beta * quantized.detach().sub(latent).pow(2).sum(-1).mean()
+                if self.update_rule == 'loss':
+                    loss = loss + quantized.sub(latent.detach()).pow(2).sum(-1).mean()
+                elif ema_update:
+                    self.ema_codebook_update(latent, y)
+            else:
+                if self.spherical:
+                    logNs = - F.cosine_similarity(quantized[:, :, None, :], self.codebook, dim=-1)
+                else:
+                    logNs = 0.5 * quantized[:, :, None, :].sub(self.codebook).pow(2).sum(-1)
+                loss = (self.beta / self.tau) * torch.einsum('blv,blv->bl', y, logNs).mean()
 
-        representation = F.one_hot(y, num_classes=self.code_options).to(dtype=query.dtype)
+        if self.hard:
+            representation = F.one_hot(y, num_classes=self.code_options).to(dtype=query.dtype)
+        else:
+            representation = y
+            y = representation.argmax(-1)
         py = representation.mean(dim=tuple(range(representation.dim()-1)))
-        Hy = - torch.sum(py * torch.log2(py + 1e-10))
+        Hy = - torch.sum(py * torch.log2(py + 1e-6))
+        Hyx = - torch.mean(representation.mul(torch.log2(representation + 1e-6)).sum(-1))
         return {'logits': latent, 'embedding': embedding.flatten(1), 'msg': y,
                 'representation': representation.flatten(1),
-                'metrics': {'Hy': Hy},
+                'metrics': {'Hy': Hy, 'Hyx': Hyx},
                 'loss': loss}
 
 
@@ -140,6 +188,10 @@ class VQBYOL(BaseMomentumMethod):
         message_size: int,
         voc_size: int,
         shared_codebook: bool=True,
+        vq_hard: bool=True,
+        vq_ladder: bool=False,
+        vq_spherical: bool=False,
+        vq_tau: float=1.0,
         vq_dimz: float=8,
         vq_beta: float=0.25, vq_eps: float=1e-8,
         vq_update_rule: Text='loss',
@@ -164,14 +216,15 @@ class VQBYOL(BaseMomentumMethod):
 
         # Online
         self.embedder = nn.Sequential(
-                             nn.Linear(self.features_dim, message_size*vq_dimz, bias=False),
-                             nn.BatchNorm1d(message_size*vq_dimz)
-                        )
+             nn.Linear(self.features_dim, message_size*vq_dimz, bias=False),
+             nn.BatchNorm1d(message_size*vq_dimz)
+        )
         self.vq = VectorQuantizer(message_size, voc_size,
             shared_codebook=shared_codebook,
+            vq_tau=vq_tau, vq_hard=vq_hard, vq_ladder=vq_ladder,
             vq_dimz=vq_dimz, vq_beta=vq_beta,
             vq_eps=vq_eps, vq_update_rule=vq_update_rule,
-            vq_ema=vq_ema)
+            vq_ema=vq_ema, vq_spherical=vq_spherical)
 
         self.projector = nn.Sequential(
             nn.Linear(message_size*vq_dimz, proj_hidden_dim),
@@ -215,6 +268,13 @@ class VQBYOL(BaseMomentumMethod):
         parser.add_argument("--message_size", type=int, default=100)
         parser.add_argument("--shared_codebook", type=eval,
             choices=[True, False], default=True)
+        parser.add_argument("--vq_hard", type=eval,
+            choices=[True, False], default=True)
+        parser.add_argument("--vq_ladder", type=eval,
+            choices=[True, False], default=False)
+        parser.add_argument("--vq_spherical", type=eval,
+            choices=[True, False], default=False)
+        parser.add_argument("--vq_tau", type=float, default=1.0)
         parser.add_argument("--vq_dimz", type=int, default=8)
         parser.add_argument("--vq_beta", type=float, default=0.25)
         parser.add_argument("--vq_eps", type=float, default=1e-8)
@@ -298,6 +358,13 @@ class VQBYOL(BaseMomentumMethod):
         out2 = self.forward_(feats)
         out.update(out2)
         return out
+
+    @property
+    def named_classifiers(self):
+        classifiers = super().named_classifiers
+        classifiers.update(**dict(y=('y', 'classifier_y'),
+                                  vq=('emb', 'classifier_vq')))
+        return classifiers
 
     def _class_step(self, X, targets, classifier):
         logits = classifier(X.detach())

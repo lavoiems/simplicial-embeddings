@@ -28,7 +28,6 @@ from orion.client import cli as orion_cli
 
 from solo.args.setup import parse_args_pretrain
 from solo.methods import METHODS
-from solo.utils.auto_resumer import AutoResumer
 
 
 try:

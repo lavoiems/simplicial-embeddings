@@ -70,4 +70,7 @@ def weighted_mean(outputs: List[Dict], key: str, batch_size_key: str) -> float:
         value += out[batch_size_key] * out[key]
         n += out[batch_size_key]
     value = value / n
-    return value.squeeze(0)
+    try:
+        return value.squeeze(0)
+    except AttributeError:
+        return value

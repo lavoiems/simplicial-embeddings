@@ -249,18 +249,6 @@ def additional_setup_linear(args: Namespace):
             len([entry.name for entry in os.scandir(dir_path) if entry.is_dir]),
         )
 
-    # create backbone-specific arguments
-    args.backbone_args = {"cifar": args.dataset in ["cifar10", "cifar100"]}
-    if "resnet" not in args.backbone and "convnext" not in args.backbone:
-        # dataset related for all transformers
-        crop_size = args.crop_size[0]
-        args.backbone_args["img_size"] = crop_size
-        if "vit" in args.backbone:
-            args.backbone_args["patch_size"] = args.patch_size
-
-    with suppress(AttributeError):
-        del args.patch_size
-
     if args.dali:
         assert args.dataset in ["imagenet100", "imagenet", "custom"]
 

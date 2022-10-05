@@ -19,7 +19,7 @@
 
 from argparse import ArgumentParser
 from functools import partial
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -93,7 +93,7 @@ class BaseMethod(pl.LightningModule):
         num_classes: int,
         backbone_args: dict,
         max_epochs: int,
-        total_max_epochs: int,
+        total_max_epochs: Optional[int],
         batch_size: int,
         optimizer: str,
         lars: bool,
@@ -430,6 +430,10 @@ class BaseMethod(pl.LightningModule):
             "logits": logits,
             "feats": feats,
         }
+
+    @property
+    def named_classifiers(self):
+        return dict(base=('feats', 'classifier'))
 
     def _base_shared_step(self, X: torch.Tensor, targets: torch.Tensor) -> Dict:
         """Forwards a batch of images X and computes the classification loss, the logits, the

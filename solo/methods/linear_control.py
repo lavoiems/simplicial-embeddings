@@ -40,8 +40,7 @@ from torch.optim.lr_scheduler import (
 class LinearModel(pl.LightningModule):
     def __init__(
         self,
-        backbone: nn.Module,
-        embedder: nn.Module,
+        model: nn.Module,
         voc_size: int,
         message_size: int,
         num_classes: int,
@@ -49,14 +48,12 @@ class LinearModel(pl.LightningModule):
         batch_size: int,
         optimizer: str,
         lars: bool,
-        lr: float,
         lrs: Sequence[float],
         wd1: Sequence[float],
         wd2: Sequence[float],
         taus: Sequence[float],
         eval_taus: Sequence[float],
         class_base: bool,
-        weight_decay: float,
         exclude_bias_n_norm: bool,
         extra_optimizer_args: dict,
         scheduler: str,
@@ -93,9 +90,9 @@ class LinearModel(pl.LightningModule):
 
         super().__init__()
 
-        self.backbone = backbone
+        self.backbone = model.backbone
+        self.embedder = model.embedder
 
-        self.embedder = embedder
         if hasattr(self.backbone, "inplanes"):
             features_dim = self.backbone.inplanes
         else:
@@ -144,8 +141,6 @@ class LinearModel(pl.LightningModule):
         self.batch_size = batch_size
         self.optimizer = optimizer
         self.lars = lars
-        self.lr = lr
-        self.weight_decay = weight_decay
         self.exclude_bias_n_norm = exclude_bias_n_norm
         self.extra_optimizer_args = extra_optimizer_args
         self.scheduler = scheduler
@@ -175,16 +170,11 @@ class LinearModel(pl.LightningModule):
 
         parser = parent_parser.add_argument_group("linear")
 
-        # backbone args
-        parser.add_argument("--backbone", choices=BaseMethod._SUPPORTED_BACKBONES, type=str)
-        # for ViT
-        parser.add_argument("--patch_size", type=int, default=16)
+        parser.add_argument("--voc_size", type=int, default=10)
+        parser.add_argument("--message_size", type=int, default=100)
 
         # general train
         parser.add_argument("--batch_size", type=int, default=128)
-        parser.add_argument("--lr", type=float, default=0.3)
-        parser.add_argument("--classifier_lr", type=float, default=0.3)
-        parser.add_argument("--weight_decay", type=float, default=0)
         parser.add_argument("--sem", type=eval, default=True)
 
         parser.add_argument("--lrs", type=float, nargs='+', default=[0.1, 0.05, 0.5])
@@ -200,9 +190,6 @@ class LinearModel(pl.LightningModule):
 
         # wandb
         parser.add_argument("--name")
-        parser.add_argument("--project")
-        parser.add_argument("--entity", default=None, type=str)
-        parser.add_argument("--group", default=None, type=str)
         parser.add_argument("--wandb", action="store_true")
         parser.add_argument("--offline", action="store_true")
 
@@ -283,8 +270,8 @@ class LinearModel(pl.LightningModule):
 
         optimizer = optimizer(
             p,
-            lr=1,
-            weight_decay=self.weight_decay,
+            lr=1.,
+            weight_decay=0.,
             **self.extra_optimizer_args,
         )
 
@@ -310,7 +297,7 @@ class LinearModel(pl.LightningModule):
         elif self.scheduler == "step":
             scheduler = MultiStepLR(optimizer, self.lr_decay_steps, gamma=0.1)
         elif self.scheduler == "exponential":
-            scheduler = ExponentialLR(optimizer, self.weight_decay)
+            scheduler = ExponentialLR(optimizer, 0.)
         else:
             raise ValueError(
                 f"{self.scheduler} not in (warmup_cosine, cosine, reduce, step, exponential)"
@@ -410,8 +397,8 @@ class LinearModel(pl.LightningModule):
 
         X, target = batch
         _, losses, accs1 = self.shared_step(X, target, batch_idx)
-        losses = {f'train_{k}': v for k, v in losses.items()}
-        accs1 = {f'train_{k}': v for k, v in accs1.items()}
+        losses = {f'train/{k}': v for k, v in losses.items()}
+        accs1 = {f'train/{k}': v for k, v in accs1.items()}
 
         log = {}
         log.update(losses)
@@ -438,8 +425,9 @@ class LinearModel(pl.LightningModule):
 
         X, target = batch
         batch_size, losses, accs1 = self.shared_step(X, target, batch_idx, taus=self.eval_taus)
-        losses = {f'val_{k}': v for k, v in losses.items()}
-        accs1 = {f'val_{k}': v for k, v in accs1.items()}
+        losses = {f'val/{k}': v for k, v in losses.items()}
+        accs1 = {f'val/{k}': v for k, v in accs1.items()}
+        accs1['val/acc1'] = accs1[list(accs1.keys())[0]]
 
         results = {
             "batch_size": batch_size,
