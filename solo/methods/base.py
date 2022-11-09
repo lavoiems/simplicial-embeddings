@@ -18,8 +18,10 @@
 # DEALINGS IN THE SOFTWARE.
 
 from argparse import ArgumentParser
+import einops
 from functools import partial
 from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+import math
 
 import pytorch_lightning as pl
 import torch
@@ -51,6 +53,213 @@ from solo.utils.metrics import accuracy_at_k, weighted_mean
 from solo.utils.momentum import MomentumUpdater, initialize_momentum_params
 from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
 from torchvision.models import resnet18, resnet50, wide_resnet50_2
+from torchvision.models.resnet import ResNet, _resnet, Bottleneck
+
+
+# taken from https://github.com/rwightman/pytorch-image-models/blob/d5ed58d623be27aada78035d2a19e2854f8b6437/timm/models/layers/weight_init.py
+def variance_scaling_(tensor, scale=1.0, mode='fan_in', distribution='truncated_normal'):
+    """Initialization by scaling the variance."""
+    fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(tensor)
+    if mode == 'fan_in':
+        denom = fan_in
+    elif mode == 'fan_out':
+        denom = fan_out
+    elif mode == 'fan_avg':
+        denom = (fan_in + fan_out) / 2
+
+    variance = scale / denom
+
+    if distribution == "truncated_normal":
+        # constant is stddev of standard normal truncated to (-2, 2)
+        nn.init.trunc_normal_(tensor, std=math.sqrt(variance) / .87962566103423978)
+    elif distribution == "normal":
+        tensor.normal_(std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        tensor.uniform_(-bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def init_std_modules(module: nn.Module) -> bool:
+    """Initialize standard layers and return whether was initialized."""
+    # all standard layers
+    if isinstance(module, nn.modules.conv._ConvNd):
+        variance_scaling_(module.weight)
+        try:
+            nn.init.zeros_(module.bias)
+        except AttributeError:
+            pass
+
+    elif isinstance(module, nn.Linear):
+        nn.init.trunc_normal_(module.weight, std=0.02)
+        try:
+            nn.init.zeros_(module.bias)
+        except AttributeError: # no bias
+            pass
+
+    elif isinstance(module, nn.modules.batchnorm._NormBase):
+        if module.affine:
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+
+    else:
+        return False
+
+    return True
+
+def weights_init(module: nn.Module, nonlinearity: str = "relu") -> None:
+    """Initialize a module and all its descendents.
+    Parameters
+    ----------
+    module : nn.Module
+       module to initialize.
+    nonlinearity : str, optional
+        Name of the nn.functional activation. Used for initialization.
+    """
+    init_std_modules(module)  # in case you gave a standard module
+
+    # loop over direct children (not grand children)
+    for m in module.children():
+
+        if init_std_modules(m):
+            pass
+        elif hasattr(m, "reset_parameters"):
+            # if has a specific reset
+            # Imp: don't go in grand children because you might have specific weights you don't want to reset
+            m.reset_parameters()
+        else:
+            weights_init(m, nonlinearity=nonlinearity)  # go to grand children
+
+
+class BottleneckExpand(nn.Module):
+
+    def __init__(
+            self,
+            in_channels=2048,
+            hidden_channels=512,
+            out_channels=2048,
+    ):
+        super().__init__()
+        self.is_residual = out_channels % in_channels == 0
+        norm_layer = nn.BatchNorm2d
+        self.expansion = out_channels // in_channels
+        self.conv1 = nn.Conv2d(in_channels, hidden_channels, kernel_size=1, bias=False)
+        self.bn1 = norm_layer(hidden_channels)
+        self.conv2 = nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, bias=False, padding=1)
+        self.bn2 = norm_layer(hidden_channels)
+        self.conv3 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1, bias=False)
+        self.bn3 = norm_layer(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.reset_parameters()
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.is_residual:
+            identity = einops.repeat(identity, 'b c h w -> b (tile c) h w', tile=self.expansion)
+            out += identity
+
+        out = self.relu(out)
+
+        return out
+
+    def reset_parameters(self) -> None:
+        weights_init(self)
+        # using Johnson-Lindenstrauss lemma for initialization of the projection matrix
+        torch.nn.init.normal_(self.conv1.weight,
+                              std=1 / math.sqrt(self.conv1.weight.shape[0]))
+
+# Implementation taken from https://github.com/YannDubs/Invariant-Self-Supervised-Learning
+class ResnetLarge2(ResNet):
+    def __init__(self, out_size, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        in_size = self.fc.in_features
+        resizer = BottleneckExpand(in_size,
+                                   512,
+                                   out_size)
+        self.avgpool = nn.Sequential(resizer, self.avgpool)
+
+
+
+def resnetlarge1(out_size, *args, **kwargs):
+    pass
+
+def resnetlarge2(out_size, *args, **kwargs):
+    return ResnetLarge2(out_size, Bottleneck, [3, 4, 6, 3], *args, **kwargs)
+
+
+
+def wide_resnet50_4(
+    *, weights = None, progress: bool = True, **kwargs: Any
+) -> ResNet:
+    """Wide ResNet-50-4 model from
+    `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
+
+    The model is the same as ResNet except for the bottleneck number of channels
+    which is twice larger in every block. The number of channels in outer 1x1
+    convolutions is the same, e.g. last block in ResNet-50 has 2048-512-2048
+    channels, and in Wide ResNet-50-24has 2048-1024-2048.
+
+    Args:
+        weights (:class:`~torchvision.models.Wide_ResNet50_2_Weights`, optional): The
+            pretrained weights to use. See
+            :class:`~torchvision.models.Wide_ResNet50_2_Weights` below for
+            more details, and possible values. By default, no pre-trained
+            weights are used.
+        progress (bool, optional): If True, displays a progress bar of the
+            download to stderr. Default is True.
+        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+            base class. Please refer to the `source code
+            <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
+            for more details about this class.
+    .. autoclass:: torchvision.models.Wide_ResNet50_2_Weights
+        :members:
+    """
+
+    return _resnet(Bottleneck, [3, 4, 6, 3], weights=weights, progress=progress, width_per_group=256, **kwargs)
+
+
+def wide_resnet50_8(
+    *, weights = None, progress: bool = True, **kwargs: Any
+) -> ResNet:
+    """Wide ResNet-50-4 model from
+    `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
+
+    The model is the same as ResNet except for the bottleneck number of channels
+    which is twice larger in every block. The number of channels in outer 1x1
+    convolutions is the same, e.g. last block in ResNet-50 has 2048-512-2048
+    channels, and in Wide ResNet-50-24has 2048-1024-2048.
+
+    Args:
+        weights (:class:`~torchvision.models.Wide_ResNet50_2_Weights`, optional): The
+            pretrained weights to use. See
+            :class:`~torchvision.models.Wide_ResNet50_2_Weights` below for
+            more details, and possible values. By default, no pre-trained
+            weights are used.
+        progress (bool, optional): If True, displays a progress bar of the
+            download to stderr. Default is True.
+        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+            base class. Please refer to the `source code
+            <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
+            for more details about this class.
+    .. autoclass:: torchvision.models.Wide_ResNet50_2_Weights
+        :members:
+    """
+
+    return _resnet(Bottleneck, [3, 4, 6, 3], weights=weights, progress=progress, width_per_group=512, **kwargs)
 
 
 def static_lr(
@@ -68,6 +277,10 @@ class BaseMethod(pl.LightningModule):
         "resnet18": resnet18,
         "resnet50": resnet50,
         "wide_resnet50_2": wide_resnet50_2,
+        "wide_resnet50_4": wide_resnet50_4,
+        "wide_resnet50_8": wide_resnet50_8,
+        "resnetlarge1": resnetlarge1,
+        "resnetlarge2": resnetlarge2,
         "vit_tiny": vit_tiny,
         "vit_small": vit_small,
         "vit_base": vit_base,
@@ -113,6 +326,7 @@ class BaseMethod(pl.LightningModule):
         lr_decay_steps: Sequence = None,
         knn_eval: bool = False,
         knn_k: int = 20,
+        out_size: int = 2048,
         **kwargs,
     ):
         """Base model that implements all basic operations for all self-supervised methods.
@@ -198,6 +412,7 @@ class BaseMethod(pl.LightningModule):
         self.grad_clip_lars = grad_clip_lars
         self.knn_eval = knn_eval
         self.knn_k = knn_k
+        self.out_size = out_size
 
         # multicrop
         self.num_crops = self.num_large_crops + self.num_small_crops
@@ -227,9 +442,14 @@ class BaseMethod(pl.LightningModule):
         if "swin" in self.backbone_name and cifar:
             kwargs["window_size"] = 4
 
-        self.backbone = self.base_model(**kwargs)
+        if 'resnetlarge' in self.backbone_name:
+            self.backbone = self.base_model(out_size, **kwargs)
+        else:
+            self.backbone = self.base_model(**kwargs)
         if "resnet" in self.backbone_name:
             self.features_dim = self.backbone.inplanes
+            if 'large' in self.backbone_name:
+                self.features_dim = out_size
             # remove fc layer
             self.backbone.fc = nn.Identity()
             if cifar:
@@ -267,6 +487,8 @@ class BaseMethod(pl.LightningModule):
         parser.add_argument("--zero_init_residual", action="store_true")
         # extra args for ViT
         parser.add_argument("--patch_size", type=int, default=16)
+
+        parser.add_argument("--out_size", type=int, default=2048)
 
         # general train
         parser.add_argument("--batch_size", type=int, default=128)
@@ -580,13 +802,19 @@ class BaseMomentumMethod(BaseMethod):
         # momentum backbone
         kwargs = self.backbone_args.copy()
         cifar = kwargs.pop("cifar", False)
+        out_size = self.out_size
         # swin specific
         if "swin" in self.backbone_name and cifar:
             kwargs["window_size"] = 4
 
-        self.momentum_backbone = self.base_model(**kwargs)
+        if 'resnetlarge' in self.backbone_name:
+            self.momentum_backbone = self.base_model(out_size, **kwargs)
+        else:
+            self.momentum_backbone = self.base_model(**kwargs)
         if "resnet" in self.backbone_name:
             self.features_dim = self.momentum_backbone.inplanes
+            if 'large' in self.backbone_name:
+                self.features_dim = out_size
             # remove fc layer
             self.momentum_backbone.fc = nn.Identity()
             if cifar:
