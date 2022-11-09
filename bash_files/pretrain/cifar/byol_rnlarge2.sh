@@ -2,7 +2,7 @@
 
 module load python/3.8
 
-source /network/mila/l/lavoiems/env_1.12/bin/activate
+source /home/mila/l/lavoiems/env_1.12/bin/activate
 
 python ../../../main_pretrain.py \
     --dataset cifar100 \
