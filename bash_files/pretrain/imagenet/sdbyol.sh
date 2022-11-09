@@ -50,8 +50,8 @@ orion hunt -n orion_sdbyol_y_mila6 --config=orion_config.yaml \
     --pred_hidden_dim 4096 \
     --base_tau_momentum 0.99 \
     --final_tau_momentum 1.0 \
-    --voc_size=21 \
-    --message_size=4500 \
+    --voc_size=24 \
+    --message_size=5000 \
     --tau_online~"loguniform(0.1,5,precision=3)" \
     --tau_target~"loguniform(0.1,5,precision=3)" \
     --momentum_classifier

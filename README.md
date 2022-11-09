@@ -5,19 +5,18 @@ The purpose of this repository is reproducing the results from the paper. For th
 
 
 ## Citation
-A new ArXiv version is comming soon. To cite the previous version of our article, please cite:
+To cite our article, please cite:
 ```
 @misc{https://doi.org/10.48550/arxiv.2204.00616,
-  doi = {10.48550/ARXIV.2204.00616},  
-  url = {https://arxiv.org/abs/2204.00616},  
-  author = {Lavoie, Samuel and Tsirigotis, Christos and Schwarzer, Max and Kawaguchi, Kenji and Vani, Ankit and Courville, Aaron},  
-  keywords = {Machine Learning (cs.LG), Computer Vision and Pattern Recognition (cs.CV), FOS: Computer and information sciences, FOS: Computer and information sciences},  
-  title = {Simplicial Embeddings in Self-Supervised Learning and Downstream Classification},  
+  doi = {10.48550/ARXIV.2204.00616},
+  url = {https://arxiv.org/abs/2204.00616},
+  author = {Lavoie, Samuel and Tsirigotis, Christos and Schwarzer, Max and Vani, Ankit and Noukhovitch, Michael and Kawaguchi, Kenji and Courville, Aaron},
+  keywords = {Machine Learning (cs.LG), Computer Vision and Pattern Recognition (cs.CV), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Simplicial Embeddings in Self-Supervised Learning and Downstream Classification},
   publisher = {arXiv},  
-  year = {2022},  
+  year = {2022},
   copyright = {Creative Commons Attribution 4.0 International}
 }
-
 ```
 
 To cite `solo-learn`, please cite their [paper](https://jmlr.org/papers/v23/21-1155.html):
