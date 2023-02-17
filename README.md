@@ -21,12 +21,12 @@ class SEM(nn.Module):
 To cite our article, please cite:
 ```
 @inproceedings{
-lavoie2023simplicial,
-title={Simplicial Embeddings in Self-Supervised Learning and Downstream Classification},
-author={Samuel Lavoie and Christos Tsirigotis and Max Schwarzer and Ankit Vani and Michael Noukhovitch and Kenji Kawaguchi and Aaron Courville},
-booktitle={International Conference on Learning Representations},
-year={2023},
-url={https://openreview.net/forum?id=RWtGreRpovS}
+    lavoie2023simplicial,
+    title={Simplicial Embeddings in Self-Supervised Learning and Downstream Classification},
+    author={Samuel Lavoie and Christos Tsirigotis and Max Schwarzer and Ankit Vani and Michael Noukhovitch and Kenji Kawaguchi and Aaron Courville},
+    booktitle={International Conference on Learning Representations},
+    year={2023},
+    url={https://openreview.net/forum?id=RWtGreRpovS}
 }
 ```
 
