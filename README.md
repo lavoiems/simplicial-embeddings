@@ -1,7 +1,5 @@
 # Simplicial Embeddings for Self-Supervised Learning and Downstream Classification
-This repository is the companion code for the article Simplicial Embeddings for Self-supervised Learning and Downstream Classification. It is a fork of the Self-Supervised learning library `solo-learn` to which we apply the modification necessary to run the experiments in the paper.
-
-The purpose of this repository is reproducing the results from the paper. For the latest up to date SSL code, you should visit the official repos.
+This repository is the companion code for the article Simplicial Embeddings for Self-supervised Learning and Downstream Classification. It is a fork of the Self-Supervised learning library `solo-learn` to which we apply the necessary modifications to run the experiments in the paper.
 
 ## SEM module
 The SEM module can be implemented as follows:
