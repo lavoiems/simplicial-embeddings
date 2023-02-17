@@ -4,7 +4,7 @@ This repository is the companion code for the article Simplicial Embeddings for 
 The purpose of this repository is reproducing the results from the paper. For the latest up to date SSL code, you should visit the official repos.
 
 ## SEM module
-The SEM module can be implement as follows:
+The SEM module can be implemented as follows:
 ```
 class SEM(nn.Module):
     def __init__(self, L, V, tau, **kwargs):
